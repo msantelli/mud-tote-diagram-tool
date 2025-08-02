@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 // Inline all types here to avoid import issues
 interface Point {
@@ -23,6 +23,7 @@ interface Edge {
 type DiagramMode = 'MUD' | 'TOTE' | 'HYBRID';
 
 function SimpleApp() {
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedTool, setSelectedTool] = useState<'select' | 'vocabulary' | 'practice' | 'test' | 'operate' | 'edge'>('select');
@@ -32,6 +33,38 @@ function SimpleApp() {
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>('');
   const [diagramMode, setDiagramMode] = useState<DiagramMode>('HYBRID');
+
+  // Global mouse event handling for better drag behavior
+  useEffect(() => {
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      if (draggedNode && selectedTool === 'select' && canvasRef.current) {
+        event.preventDefault();
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+        const newX = Math.max(50, Math.min(canvasRect.width - 50, event.clientX - canvasRect.left - dragOffset.x));
+        const newY = Math.max(25, Math.min(canvasRect.height - 25, event.clientY - canvasRect.top - dragOffset.y));
+        
+        setNodes(prevNodes => prevNodes.map(node =>
+          node.id === draggedNode
+            ? { ...node, position: { x: newX, y: newY } }
+            : node
+        ));
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      setDraggedNode(null);
+    };
+
+    if (draggedNode) {
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      document.addEventListener('mouseup', handleGlobalMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [draggedNode, selectedTool, dragOffset]);
 
   // Mode-specific helper functions
   const getAvailableTools = (mode: DiagramMode) => {
@@ -77,8 +110,8 @@ function SimpleApp() {
   };
 
   const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-      const rect = event.currentTarget.getBoundingClientRect();
+    if (event.target === event.currentTarget && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       addNode(x, y);
@@ -141,34 +174,20 @@ function SimpleApp() {
   };
 
   const handleMouseDown = (nodeId: string, event: React.MouseEvent) => {
-    if (selectedTool === 'select') {
+    if (selectedTool === 'select' && canvasRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
       const node = nodes.find(n => n.id === nodeId)!;
-      const rect = event.currentTarget.getBoundingClientRect();
+      const canvasRect = canvasRef.current.getBoundingClientRect();
+      
       setDraggedNode(nodeId);
       setDragOffset({
-        x: event.clientX - rect.left - node.position.x,
-        y: event.clientY - rect.top - node.position.y
+        x: event.clientX - canvasRect.left - node.position.x,
+        y: event.clientY - canvasRect.top - node.position.y
       });
     }
   };
 
-  const handleMouseMove = (event: React.MouseEvent) => {
-    if (draggedNode && selectedTool === 'select') {
-      const rect = event.currentTarget.getBoundingClientRect();
-      const newX = event.clientX - rect.left - dragOffset.x;
-      const newY = event.clientY - rect.top - dragOffset.y;
-      
-      setNodes(nodes.map(node =>
-        node.id === draggedNode
-          ? { ...node, position: { x: newX, y: newY } }
-          : node
-      ));
-    }
-  };
-
-  const handleMouseUp = () => {
-    setDraggedNode(null);
-  };
 
   // Node editing functions
   const handleNodeDoubleClick = (nodeId: string, event: React.MouseEvent) => {
@@ -556,9 +575,8 @@ ${tikzCode}
 
       {/* Canvas */}
       <div 
+        ref={canvasRef}
         onClick={handleCanvasClick}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
         style={{ 
           flex: 1, 
           background: '#fafafa',
