@@ -17,8 +17,10 @@ interface Edge {
   id: string;
   source: string;
   target: string;
-  type: 'PV' | 'VP' | 'PP' | 'VV';
+  type: 'PV' | 'VP' | 'PP' | 'VV' | 'sequence' | 'feedback' | 'loop' | 'exit';
 }
+
+type DiagramMode = 'MUD' | 'TOTE' | 'HYBRID';
 
 function SimpleApp() {
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -29,6 +31,37 @@ function SimpleApp() {
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>('');
+  const [diagramMode, setDiagramMode] = useState<DiagramMode>('HYBRID');
+
+  // Mode-specific helper functions
+  const getAvailableTools = (mode: DiagramMode) => {
+    switch (mode) {
+      case 'MUD':
+        return ['select', 'vocabulary', 'practice', 'edge'] as const;
+      case 'TOTE':
+        return ['select', 'test', 'operate', 'edge'] as const;
+      case 'HYBRID':
+        return ['select', 'vocabulary', 'practice', 'test', 'operate', 'edge'] as const;
+    }
+  };
+
+  const getModeDescription = (mode: DiagramMode) => {
+    switch (mode) {
+      case 'MUD':
+        return 'Meaning-Use Diagrams: Focus on vocabularies, practices, and semantic relations';
+      case 'TOTE':
+        return 'Test-Operate-Test-Exit: Focus on goal-directed behavioral cycles';
+      case 'HYBRID':
+        return 'Combined mode: All node types and relations available';
+    }
+  };
+
+  const handleModeChange = (newMode: DiagramMode) => {
+    setDiagramMode(newMode);
+    // Reset to select tool when changing modes
+    setSelectedTool('select');
+    setSelectedNodes([]);
+  };
 
   const addNode = (x: number, y: number) => {
     if (selectedTool === 'select' || selectedTool === 'edge') return;
@@ -60,19 +93,36 @@ function SimpleApp() {
       if (selectedNodes.length === 0) {
         setSelectedNodes([nodeId]);
       } else if (selectedNodes.length === 1 && selectedNodes[0] !== nodeId) {
-        // Create edge
+        // Create edge with mode-specific logic
         const sourceNode = nodes.find(n => n.id === selectedNodes[0])!;
         const targetNode = nodes.find(n => n.id === nodeId)!;
         
-        let edgeType: 'PV' | 'VP' | 'PP' | 'VV';
-        if (sourceNode.type === 'practice' && targetNode.type === 'vocabulary') {
-          edgeType = 'PV';
-        } else if (sourceNode.type === 'vocabulary' && targetNode.type === 'practice') {
-          edgeType = 'VP';
-        } else if (sourceNode.type === 'practice' && targetNode.type === 'practice') {
-          edgeType = 'PP';
+        let edgeType: Edge['type'];
+        
+        if (diagramMode === 'MUD' || (diagramMode === 'HYBRID' && 
+            (sourceNode.type === 'vocabulary' || sourceNode.type === 'practice') &&
+            (targetNode.type === 'vocabulary' || targetNode.type === 'practice'))) {
+          // MUD relations
+          if (sourceNode.type === 'practice' && targetNode.type === 'vocabulary') {
+            edgeType = 'PV';
+          } else if (sourceNode.type === 'vocabulary' && targetNode.type === 'practice') {
+            edgeType = 'VP';
+          } else if (sourceNode.type === 'practice' && targetNode.type === 'practice') {
+            edgeType = 'PP';
+          } else {
+            edgeType = 'VV';
+          }
         } else {
-          edgeType = 'VV';
+          // TOTE relations
+          if (sourceNode.type === 'test' && targetNode.type === 'operate') {
+            edgeType = 'sequence';
+          } else if (sourceNode.type === 'operate' && targetNode.type === 'test') {
+            edgeType = 'feedback';
+          } else if (sourceNode.type === 'test' && targetNode.type === 'test') {
+            edgeType = 'loop';
+          } else {
+            edgeType = 'sequence'; // Default for TOTE
+          }
         }
         
         const newEdge: Edge = {
@@ -290,11 +340,17 @@ ${tikzCode}
     practice/.style={rectangle, draw=practicecolor, fill=practicecolor!10, thick, minimum width=2.5cm, minimum height=1.2cm, rounded corners=2mm, text centered, font=\\\\small},
     test/.style={diamond, draw=testcolor, fill=testcolor!10, thick, minimum width=2cm, minimum height=2cm, text centered, font=\\\\small},
     operate/.style={rectangle, draw=operatecolor, fill=operatecolor!10, thick, minimum width=2.5cm, minimum height=1.2cm, text centered, font=\\\\small},
+    % MUD relation styles
     pv/.style={->, thick, color=testcolor},
     vp/.style={->, thick, color=practicecolor},
     pp/.style={->, thick, color=purple},
     vv/.style={->, thick, color=red},
-    resultant/.style={->, thick, dashed, color=gray}
+    resultant/.style={->, thick, dashed, color=gray},
+    % TOTE relation styles
+    sequence/.style={->, thick, color=blue},
+    feedback/.style={->, thick, color=orange, bend left=20},
+    loop/.style={->, thick, color=teal, loop above},
+    exit/.style={->, thick, color=brown, double}
   }
 
 `;
@@ -318,14 +374,20 @@ ${tikzCode}
     tikz += '\n  % Edges\n';
     edges.forEach(edge => {
       const styleMap = {
+        // MUD relations
         'PV': 'pv',
         'VP': 'vp', 
         'PP': 'pp',
         'VV': 'vv',
-        'resultant': 'resultant'
+        'resultant': 'resultant',
+        // TOTE relations
+        'sequence': 'sequence',
+        'feedback': 'feedback',
+        'loop': 'loop',
+        'exit': 'exit'
       };
       
-      const style = styleMap[edge.type] || 'pv';
+      const style = styleMap[edge.type as keyof typeof styleMap] || 'pv';
       const labelText = edge.type;
       
       tikz += `  \\draw[${style}] (${edge.source}) -- (${edge.target}) node[midway, above, font=\\\\tiny, fill=white, inner sep=1pt] {${labelText}};
@@ -347,10 +409,16 @@ ${tikzCode}
 
   const getEdgeColor = (type: string) => {
     switch (type) {
+      // MUD relations
       case 'PV': return '#4CAF50'; // Green
       case 'VP': return '#FF9800'; // Orange  
       case 'PP': return '#9C27B0'; // Purple
       case 'VV': return '#F44336'; // Red
+      // TOTE relations
+      case 'sequence': return '#2196F3'; // Blue
+      case 'feedback': return '#FF5722'; // Deep Orange
+      case 'loop': return '#607D8B'; // Blue Grey
+      case 'exit': return '#795548'; // Brown
       default: return '#666';
     }
   };
@@ -366,10 +434,36 @@ ${tikzCode}
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
-        <h1 style={{ margin: 0 }}>MUD & TOTE Diagram Tool</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <h1 style={{ margin: 0 }}>MUD & TOTE Diagram Tool</h1>
+          
+          {/* Mode Selector */}
+          <div style={{ display: 'flex', gap: '2px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', padding: '2px' }}>
+            {(['MUD', 'TOTE', 'HYBRID'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => handleModeChange(mode)}
+                style={{
+                  padding: '0.3rem 0.8rem',
+                  border: 'none',
+                  background: diagramMode === mode ? 'rgba(255,255,255,0.9)' : 'transparent',
+                  color: diagramMode === mode ? '#1976D2' : 'white',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                  fontWeight: diagramMode === mode ? 'bold' : 'normal',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        </div>
+        
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {/* Tools */}
-          {(['select', 'vocabulary', 'practice', 'test', 'operate', 'edge'] as const).map(tool => (
+          {/* Tools - filtered by mode */}
+          {getAvailableTools(diagramMode).map(tool => (
             <button
               key={tool}
               onClick={() => {
@@ -647,19 +741,52 @@ ${tikzCode}
             left: '50%',
             transform: 'translate(-50%, -50%)',
             textAlign: 'center',
-            color: '#666'
+            color: '#666',
+            maxWidth: '600px'
           }}>
             <h2>MUD & TOTE Diagram Creator</h2>
+            <div style={{ 
+              background: diagramMode === 'MUD' ? '#E3F2FD' : 
+                          diagramMode === 'TOTE' ? '#E8F5E8' : '#F3E5F5',
+              padding: '12px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              border: `2px solid ${diagramMode === 'MUD' ? '#1976D2' : 
+                                   diagramMode === 'TOTE' ? '#4CAF50' : '#9C27B0'}`
+            }}>
+              <strong>Current Mode: {diagramMode}</strong>
+              <br />
+              <em style={{ fontSize: '14px' }}>{getModeDescription(diagramMode)}</em>
+            </div>
+            
             <p><strong>1. Create Nodes:</strong> Select a tool and click on canvas</p>
             <p><strong>2. Move Nodes:</strong> Use Select tool and drag nodes</p>
             <p><strong>3. Edit Labels:</strong> Double-click any node to edit its label</p>
             <p><strong>4. Create Edges:</strong> Select Edge tool, click source node, then target node</p>
             <p><strong>5. Export:</strong> Use JSON, SVG, or LaTeX buttons to save your diagram</p>
+            
             <div style={{ marginTop: '20px', fontSize: '14px' }}>
-              <p>• <strong>Vocabulary</strong> = Blue oval (concepts/language)</p>
-              <p>• <strong>Practice</strong> = Orange rectangle (abilities/actions)</p>
-              <p>• <strong>Test</strong> = Green diamond (TOTE conditions)</p>
-              <p>• <strong>Operate</strong> = Yellow rectangle (TOTE operations)</p>
+              {diagramMode === 'MUD' && (
+                <>
+                  <p>• <strong>Vocabulary</strong> = Blue oval (concepts/language)</p>
+                  <p>• <strong>Practice</strong> = Orange rectangle (abilities/actions)</p>
+                  <p>• <strong>Relations</strong>: PV (green), VP (orange), PP (purple), VV (red)</p>
+                </>
+              )}
+              {diagramMode === 'TOTE' && (
+                <>
+                  <p>• <strong>Test</strong> = Green diamond (conditions/decisions)</p>
+                  <p>• <strong>Operate</strong> = Yellow rectangle (actions/operations)</p>
+                  <p>• <strong>Relations</strong>: Sequence (blue), Feedback (orange), Loop (grey)</p>
+                </>
+              )}
+              {diagramMode === 'HYBRID' && (
+                <>
+                  <p>• <strong>Vocabulary</strong> = Blue oval | <strong>Practice</strong> = Orange rectangle</p>
+                  <p>• <strong>Test</strong> = Green diamond | <strong>Operate</strong> = Yellow rectangle</p>
+                  <p>• <strong>All relation types available</strong></p>
+                </>
+              )}
             </div>
           </div>
         )}
