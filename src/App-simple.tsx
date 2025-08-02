@@ -15,9 +15,14 @@ interface Node {
 
 interface Edge {
   id: string;
-  source: string;
-  target: string;
-  type: 'PV' | 'VP' | 'PP' | 'VV' | 'sequence' | 'feedback' | 'loop' | 'exit';
+  source: string | null; // null for entry arrows
+  target: string | null; // null for exit arrows
+  type: 'PV' | 'VP' | 'PP' | 'VV' | 'sequence' | 'feedback' | 'loop' | 'exit' | 'entry';
+  // For entry/exit arrows, store position
+  position?: Point;
+  // For edges with null source/target, store the endpoint position
+  entryPoint?: Point;
+  exitPoint?: Point;
 }
 
 type DiagramMode = 'MUD' | 'TOTE' | 'HYBRID';
@@ -26,7 +31,7 @@ function SimpleApp() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const [selectedTool, setSelectedTool] = useState<'select' | 'vocabulary' | 'practice' | 'test' | 'operate' | 'edge'>('select');
+  const [selectedTool, setSelectedTool] = useState<'select' | 'vocabulary' | 'practice' | 'test' | 'operate' | 'edge' | 'entry' | 'exit'>('select');
   const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
@@ -35,6 +40,7 @@ function SimpleApp() {
   const [diagramMode, setDiagramMode] = useState<DiagramMode>('HYBRID');
   const [showEdgeTypeSelector, setShowEdgeTypeSelector] = useState<boolean>(false);
   const [pendingEdge, setPendingEdge] = useState<{source: string, target: string} | null>(null);
+  const [autoDetectEdges, setAutoDetectEdges] = useState<boolean>(true);
 
   // Global mouse event handling for better drag behavior
   useEffect(() => {
@@ -74,9 +80,9 @@ function SimpleApp() {
       case 'MUD':
         return ['select', 'vocabulary', 'practice', 'edge'] as const;
       case 'TOTE':
-        return ['select', 'test', 'operate', 'edge'] as const;
+        return ['select', 'test', 'operate', 'edge', 'entry', 'exit'] as const;
       case 'HYBRID':
-        return ['select', 'vocabulary', 'practice', 'test', 'operate', 'edge'] as const;
+        return ['select', 'vocabulary', 'practice', 'test', 'operate', 'edge', 'entry', 'exit'] as const;
     }
   };
 
@@ -95,9 +101,9 @@ function SimpleApp() {
     if (mode === 'MUD') {
       return ['PV', 'VP', 'PP', 'VV'];
     } else if (mode === 'TOTE') {
-      return ['sequence', 'feedback', 'loop', 'exit'];
+      return ['sequence', 'feedback', 'loop', 'exit', 'entry'];
     } else {
-      return ['PV', 'VP', 'PP', 'VV', 'sequence', 'feedback', 'loop', 'exit'];
+      return ['PV', 'VP', 'PP', 'VV', 'sequence', 'feedback', 'loop', 'exit', 'entry'];
     }
   };
 
@@ -110,6 +116,21 @@ function SimpleApp() {
 
   const addNode = (x: number, y: number) => {
     if (selectedTool === 'select' || selectedTool === 'edge') return;
+    
+    // Handle entry and exit arrows
+    if (selectedTool === 'entry' || selectedTool === 'exit') {
+      const newEdge: Edge = {
+        id: Date.now().toString(),
+        source: selectedTool === 'entry' ? null : 'standalone',
+        target: selectedTool === 'exit' ? null : 'standalone',
+        type: selectedTool,
+        position: { x, y },
+        entryPoint: selectedTool === 'entry' ? { x, y } : undefined,
+        exitPoint: selectedTool === 'exit' ? { x, y } : undefined
+      };
+      setEdges([...edges, newEdge]);
+      return;
+    }
     
     const newNode: Node = {
       id: Date.now().toString(),
@@ -138,10 +159,38 @@ function SimpleApp() {
       if (selectedNodes.length === 0) {
         setSelectedNodes([nodeId]);
       } else if (selectedNodes.length === 1 && selectedNodes[0] !== nodeId) {
-        // Show edge type selector for manual selection
-        setPendingEdge({ source: selectedNodes[0], target: nodeId });
-        setShowEdgeTypeSelector(true);
-        setSelectedNodes([]);
+        const sourceNode = nodes.find(n => n.id === selectedNodes[0])!;
+        const targetNode = nodes.find(n => n.id === nodeId)!;
+        
+        // Use auto-detection if enabled, otherwise show selector
+        if (autoDetectEdges && diagramMode === 'MUD') {
+          // Auto-detect MUD edge type
+          let edgeType: Edge['type'];
+          if (sourceNode.type === 'practice' && targetNode.type === 'vocabulary') {
+            edgeType = 'PV';
+          } else if (sourceNode.type === 'vocabulary' && targetNode.type === 'practice') {
+            edgeType = 'VP';
+          } else if (sourceNode.type === 'practice' && targetNode.type === 'practice') {
+            edgeType = 'PP';
+          } else {
+            edgeType = 'VV';
+          }
+          
+          const newEdge: Edge = {
+            id: Date.now().toString(),
+            source: selectedNodes[0],
+            target: nodeId,
+            type: edgeType
+          };
+          
+          setEdges([...edges, newEdge]);
+          setSelectedNodes([]);
+        } else {
+          // Show edge type selector for manual selection
+          setPendingEdge({ source: selectedNodes[0], target: nodeId });
+          setShowEdgeTypeSelector(true);
+          setSelectedNodes([]);
+        }
       }
     } else {
       setSelectedNodes([nodeId]);
@@ -433,6 +482,7 @@ ${tikzCode}
       case 'feedback': return '#FF5722'; // Deep Orange
       case 'loop': return '#607D8B'; // Blue Grey
       case 'exit': return '#8BC34A'; // Light Green
+      case 'entry': return '#4CAF50'; // Green
       default: return '#666';
     }
   };
@@ -473,6 +523,34 @@ ${tikzCode}
               </button>
             ))}
           </div>
+          
+          {/* Auto-detection toggle for MUD mode */}
+          {diagramMode === 'MUD' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1rem' }}>
+              <input
+                type="checkbox"
+                id="auto-detect"
+                checked={autoDetectEdges}
+                onChange={(e) => setAutoDetectEdges(e.target.checked)}
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  cursor: 'pointer'
+                }}
+              />
+              <label
+                htmlFor="auto-detect"
+                style={{
+                  color: 'white',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+              >
+                Auto-detect edges
+              </label>
+            </div>
+          )}
         </div>
         
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -577,13 +655,68 @@ ${tikzCode}
           background: '#fafafa',
           position: 'relative',
           cursor: selectedTool === 'select' ? 'default' : 
-                  selectedTool === 'edge' ? 'crosshair' : 'copy',
+                  selectedTool === 'edge' ? 'crosshair' : 
+                  selectedTool === 'entry' || selectedTool === 'exit' ? 'crosshair' : 'copy',
           overflow: 'hidden'
         }}
       >
         {/* Render edges first (behind nodes) */}
         <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
           {edges.map(edge => {
+            // Handle entry and exit arrows
+            if (edge.type === 'entry' && edge.entryPoint) {
+              return (
+                <g key={edge.id}>
+                  <line
+                    x1={edge.entryPoint.x - 40}
+                    y1={edge.entryPoint.y}
+                    x2={edge.entryPoint.x}
+                    y2={edge.entryPoint.y}
+                    stroke={getEdgeColor(edge.type)}
+                    strokeWidth="3"
+                    markerEnd="url(#arrowhead)"
+                  />
+                  <text
+                    x={edge.entryPoint.x - 50}
+                    y={edge.entryPoint.y - 10}
+                    textAnchor="middle"
+                    fontSize="12"
+                    fill={getEdgeColor(edge.type)}
+                    fontWeight="bold"
+                  >
+                    ENTRY
+                  </text>
+                </g>
+              );
+            }
+            
+            if (edge.type === 'exit' && edge.exitPoint) {
+              return (
+                <g key={edge.id}>
+                  <line
+                    x1={edge.exitPoint.x}
+                    y1={edge.exitPoint.y}
+                    x2={edge.exitPoint.x + 40}
+                    y2={edge.exitPoint.y}
+                    stroke={getEdgeColor(edge.type)}
+                    strokeWidth="3"
+                    markerEnd="url(#arrowhead)"
+                  />
+                  <text
+                    x={edge.exitPoint.x + 50}
+                    y={edge.exitPoint.y - 10}
+                    textAnchor="middle"
+                    fontSize="12"
+                    fill={getEdgeColor(edge.type)}
+                    fontWeight="bold"
+                  >
+                    EXIT
+                  </text>
+                </g>
+              );
+            }
+            
+            // Regular edges between nodes
             const sourceNode = nodes.find(n => n.id === edge.source);
             const targetNode = nodes.find(n => n.id === edge.target);
             if (!sourceNode || !targetNode) return null;
@@ -858,6 +991,7 @@ ${tikzCode}
                   else if (edgeType === 'feedback') description = 'Feedback loop';
                   else if (edgeType === 'loop') description = 'Iterative loop';
                   else if (edgeType === 'exit') description = 'Exit condition';
+                  else if (edgeType === 'entry') description = 'Entry point';
                   
                   return (
                     <button
