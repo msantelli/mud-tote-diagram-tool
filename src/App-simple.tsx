@@ -33,6 +33,8 @@ function SimpleApp() {
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>('');
   const [diagramMode, setDiagramMode] = useState<DiagramMode>('HYBRID');
+  const [showEdgeTypeSelector, setShowEdgeTypeSelector] = useState<boolean>(false);
+  const [pendingEdge, setPendingEdge] = useState<{source: string, target: string} | null>(null);
 
   // Global mouse event handling for better drag behavior
   useEffect(() => {
@@ -89,6 +91,16 @@ function SimpleApp() {
     }
   };
 
+  const getAvailableEdgeTypes = (mode: DiagramMode, sourceType?: string, targetType?: string): Edge['type'][] => {
+    if (mode === 'MUD') {
+      return ['PV', 'VP', 'PP', 'VV'];
+    } else if (mode === 'TOTE') {
+      return ['sequence', 'feedback', 'loop', 'exit'];
+    } else {
+      return ['PV', 'VP', 'PP', 'VV', 'sequence', 'feedback', 'loop', 'exit'];
+    }
+  };
+
   const handleModeChange = (newMode: DiagramMode) => {
     setDiagramMode(newMode);
     // Reset to select tool when changing modes
@@ -126,46 +138,9 @@ function SimpleApp() {
       if (selectedNodes.length === 0) {
         setSelectedNodes([nodeId]);
       } else if (selectedNodes.length === 1 && selectedNodes[0] !== nodeId) {
-        // Create edge with mode-specific logic
-        const sourceNode = nodes.find(n => n.id === selectedNodes[0])!;
-        const targetNode = nodes.find(n => n.id === nodeId)!;
-        
-        let edgeType: Edge['type'];
-        
-        if (diagramMode === 'MUD' || (diagramMode === 'HYBRID' && 
-            (sourceNode.type === 'vocabulary' || sourceNode.type === 'practice') &&
-            (targetNode.type === 'vocabulary' || targetNode.type === 'practice'))) {
-          // MUD relations
-          if (sourceNode.type === 'practice' && targetNode.type === 'vocabulary') {
-            edgeType = 'PV';
-          } else if (sourceNode.type === 'vocabulary' && targetNode.type === 'practice') {
-            edgeType = 'VP';
-          } else if (sourceNode.type === 'practice' && targetNode.type === 'practice') {
-            edgeType = 'PP';
-          } else {
-            edgeType = 'VV';
-          }
-        } else {
-          // TOTE relations
-          if (sourceNode.type === 'test' && targetNode.type === 'operate') {
-            edgeType = 'sequence';
-          } else if (sourceNode.type === 'operate' && targetNode.type === 'test') {
-            edgeType = 'feedback';
-          } else if (sourceNode.type === 'test' && targetNode.type === 'test') {
-            edgeType = 'loop';
-          } else {
-            edgeType = 'sequence'; // Default for TOTE
-          }
-        }
-        
-        const newEdge: Edge = {
-          id: Date.now().toString(),
-          source: selectedNodes[0],
-          target: nodeId,
-          type: edgeType
-        };
-        
-        setEdges([...edges, newEdge]);
+        // Show edge type selector for manual selection
+        setPendingEdge({ source: selectedNodes[0], target: nodeId });
+        setShowEdgeTypeSelector(true);
         setSelectedNodes([]);
       }
     } else {
@@ -216,6 +191,26 @@ function SimpleApp() {
   const handleEditCancel = () => {
     setEditingNode(null);
     setEditText('');
+  };
+
+  const createEdgeWithType = (edgeType: Edge['type']) => {
+    if (pendingEdge) {
+      const newEdge: Edge = {
+        id: Date.now().toString(),
+        source: pendingEdge.source,
+        target: pendingEdge.target,
+        type: edgeType
+      };
+      
+      setEdges([...edges, newEdge]);
+      setPendingEdge(null);
+      setShowEdgeTypeSelector(false);
+    }
+  };
+
+  const cancelEdgeCreation = () => {
+    setPendingEdge(null);
+    setShowEdgeTypeSelector(false);
   };
 
   // Export functions
@@ -437,7 +432,7 @@ ${tikzCode}
       case 'sequence': return '#2196F3'; // Blue
       case 'feedback': return '#FF5722'; // Deep Orange
       case 'loop': return '#607D8B'; // Blue Grey
-      case 'exit': return '#795548'; // Brown
+      case 'exit': return '#8BC34A'; // Light Green
       default: return '#666';
     }
   };
@@ -823,6 +818,93 @@ ${tikzCode}
             fontSize: '14px'
           }}>
             Click another node to create an edge
+          </div>
+        )}
+
+        {/* Edge Type Selector Modal */}
+        {showEdgeTypeSelector && pendingEdge && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000
+          }}>
+            <div style={{
+              background: 'white',
+              borderRadius: '8px',
+              padding: '20px',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+              minWidth: '300px'
+            }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#333' }}>Select Edge Type</h3>
+              
+              <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+                {getAvailableEdgeTypes(diagramMode).map(edgeType => {
+                  const sourceNode = nodes.find(n => n.id === pendingEdge.source);
+                  const targetNode = nodes.find(n => n.id === pendingEdge.target);
+                  
+                  let description = '';
+                  if (edgeType === 'PV') description = 'Practice → Vocabulary';
+                  else if (edgeType === 'VP') description = 'Vocabulary → Practice';
+                  else if (edgeType === 'PP') description = 'Practice → Practice';
+                  else if (edgeType === 'VV') description = 'Vocabulary → Vocabulary';
+                  else if (edgeType === 'sequence') description = 'Sequential action';
+                  else if (edgeType === 'feedback') description = 'Feedback loop';
+                  else if (edgeType === 'loop') description = 'Iterative loop';
+                  else if (edgeType === 'exit') description = 'Exit condition';
+                  
+                  return (
+                    <button
+                      key={edgeType}
+                      onClick={() => createEdgeWithType(edgeType)}
+                      style={{
+                        padding: '12px 16px',
+                        border: '2px solid #e0e0e0',
+                        background: '#fafafa',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.2s ease',
+                        color: getEdgeColor(edgeType),
+                        fontWeight: 'bold'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.background = '#f0f0f0';
+                        e.currentTarget.style.borderColor = getEdgeColor(edgeType);
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background = '#fafafa';
+                        e.currentTarget.style.borderColor = '#e0e0e0';
+                      }}
+                    >
+                      <div style={{ fontSize: '16px', marginBottom: '4px' }}>{edgeType}</div>
+                      <div style={{ fontSize: '12px', color: '#666', fontWeight: 'normal' }}>{description}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={cancelEdgeCreation}
+                  style={{
+                    padding: '8px 16px',
+                    border: '1px solid #ddd',
+                    background: '#f5f5f5',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
