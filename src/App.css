@@ -1,0 +1,102 @@
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.app-header {
+  background: #1976D2;
+  color: white;
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.toolbar button {
+  padding: 0.5rem 1rem;
+  border: 1px solid rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.1);
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.toolbar button:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.toolbar button.active {
+  background: rgba(255,255,255,0.3);
+  border-color: rgba(255,255,255,0.6);
+  font-weight: 500;
+}
+
+.create-diagram {
+  background: #4CAF50 !important;
+  border-color: #4CAF50 !important;
+}
+
+.create-diagram:hover {
+  background: #45a049 !important;
+}
+
+.app-main {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.welcome-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  text-align: center;
+  color: #666;
+}
+
+.welcome-screen h2 {
+  margin-bottom: 1rem;
+  color: #333;
+  font-size: 2rem;
+  font-weight: 300;
+}
+
+.welcome-screen p {
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+  max-width: 500px;
+}
+
+.create-diagram-large {
+  padding: 1rem 2rem;
+  background: #1976D2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.create-diagram-large:hover {
+  background: #1565C0;
+}
