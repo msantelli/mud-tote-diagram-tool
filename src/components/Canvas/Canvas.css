@@ -1,0 +1,60 @@
+.canvas-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+}
+
+.diagram-canvas {
+  cursor: crosshair;
+  background: radial-gradient(circle, #e8e8e8 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.diagram-canvas.select-mode {
+  cursor: default;
+}
+
+.node {
+  transition: transform 0.1s ease;
+}
+
+.node:hover {
+  filter: brightness(1.1);
+}
+
+.node.selected {
+  filter: drop-shadow(0 0 5px rgba(33, 150, 243, 0.5));
+}
+
+.edge-path {
+  transition: stroke 0.2s ease;
+}
+
+.edge-path:hover {
+  stroke-width: 3px;
+}
+
+.edge-label {
+  pointer-events: none;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Node type specific styles */
+.node.vocabulary ellipse {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
+
+.node.practice rect {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
+
+.node.test path {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
+
+.node.operate rect {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+}
