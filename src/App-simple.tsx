@@ -305,9 +305,61 @@ function SimpleApp() {
   };
 
   const shouldShowArrowhead = (edgeType: string): boolean => {
-    // Show arrowheads for qualified MUD edges and all TOTE edges (except entry)
-    return isQualifiedMudEdge(edgeType) || 
-           ['sequence', 'feedback', 'loop', 'exit'].includes(edgeType);
+    // Show arrowheads on all edges except entry arrows (which have no source)
+    return edgeType !== 'entry';
+  };
+
+  // Helper function to calculate parallel edge offsets for multiple edges between same nodes
+  const calculateEdgeOffset = (edge: Edge, allEdges: Edge[]): { x1: number, y1: number, x2: number, y2: number } => {
+    const sourceNode = nodes.find(n => n.id === edge.source);
+    const targetNode = nodes.find(n => n.id === edge.target);
+    
+    if (!sourceNode || !targetNode) {
+      return { x1: 0, y1: 0, x2: 0, y2: 0 };
+    }
+
+    // Find all edges between the same pair of nodes (in both directions)
+    const parallelEdges = allEdges.filter(e => 
+      (e.source === edge.source && e.target === edge.target) ||
+      (e.source === edge.target && e.target === edge.source)
+    );
+
+    // If only one edge, use direct line
+    if (parallelEdges.length <= 1) {
+      return {
+        x1: sourceNode.position.x,
+        y1: sourceNode.position.y,
+        x2: targetNode.position.x,
+        y2: targetNode.position.y
+      };
+    }
+
+    // Calculate base line vector
+    const dx = targetNode.position.x - sourceNode.position.x;
+    const dy = targetNode.position.y - sourceNode.position.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    
+    if (length === 0) return { x1: sourceNode.position.x, y1: sourceNode.position.y, x2: targetNode.position.x, y2: targetNode.position.y };
+
+    // Calculate perpendicular vector (normalized)
+    const perpX = -dy / length;
+    const perpY = dx / length;
+
+    // Find this edge's index in the parallel edges array
+    const edgeIndex = parallelEdges.findIndex(e => e.id === edge.id);
+    const totalEdges = parallelEdges.length;
+    
+    // Calculate offset: spread edges around the center line
+    const spacing = 20; // pixels between parallel edges
+    const offset = (edgeIndex - (totalEdges - 1) / 2) * spacing;
+
+    // Apply offset to both endpoints
+    const x1 = sourceNode.position.x + perpX * offset;
+    const y1 = sourceNode.position.y + perpY * offset;
+    const x2 = targetNode.position.x + perpX * offset;
+    const y2 = targetNode.position.y + perpY * offset;
+
+    return { x1, y1, x2, y2 };
   };
 
   const handleModeChange = (newMode: DiagramMode) => {
@@ -634,12 +686,14 @@ function SimpleApp() {
           if (!sourceNode || !targetNode) return '';
           
           const color = getEdgeColor(edge.type, edge.isResultant);
+          const coords = calculateEdgeOffset(edge, edges);
+          const dashArray = edge.isResultant ? 'stroke-dasharray="5,5"' : '';
           return `
-            <line x1="${sourceNode.position.x}" y1="${sourceNode.position.y}" 
-                  x2="${targetNode.position.x}" y2="${targetNode.position.y}" 
-                  stroke="${color}" stroke-width="2" marker-end="url(#arrowhead)"/>
-            <text x="${(sourceNode.position.x + targetNode.position.x) / 2}" 
-                  y="${(sourceNode.position.y + targetNode.position.y) / 2 - 10}" 
+            <line x1="${coords.x1}" y1="${coords.y1}" 
+                  x2="${coords.x2}" y2="${coords.y2}" 
+                  stroke="${color}" stroke-width="2" ${dashArray} marker-end="url(#arrowhead)"/>
+            <text x="${(coords.x1 + coords.x2) / 2}" 
+                  y="${(coords.y1 + coords.y2) / 2 - 10}" 
                   text-anchor="middle" font-size="12" fill="${color}" font-weight="bold">
               ${edge.type}
             </text>
@@ -1101,14 +1155,17 @@ ${tikzCode}
             const targetNode = nodes.find(n => n.id === edge.target);
             if (!sourceNode || !targetNode) return null;
             
+            // Calculate offset coordinates for parallel edge spacing
+            const coords = calculateEdgeOffset(edge, edges);
+            
             return (
               <g key={edge.id}>
                 {/* Invisible thicker line for easier clicking */}
                 <line
-                  x1={sourceNode.position.x}
-                  y1={sourceNode.position.y}
-                  x2={targetNode.position.x}
-                  y2={targetNode.position.y}
+                  x1={coords.x1}
+                  y1={coords.y1}
+                  x2={coords.x2}
+                  y2={coords.y2}
                   stroke="transparent"
                   strokeWidth="12"
                   style={{ cursor: 'pointer', pointerEvents: 'auto' }}
@@ -1116,10 +1173,10 @@ ${tikzCode}
                 />
                 {/* Visible edge line */}
                 <line
-                  x1={sourceNode.position.x}
-                  y1={sourceNode.position.y}
-                  x2={targetNode.position.x}
-                  y2={targetNode.position.y}
+                  x1={coords.x1}
+                  y1={coords.y1}
+                  x2={coords.x2}
+                  y2={coords.y2}
                   stroke={getEdgeColor(edge.type, edge.isResultant)}
                   strokeWidth={selectedEdges.includes(edge.id) ? "4" : "2"}
                   strokeDasharray={edge.isResultant ? '5,5' : 'none'}
@@ -1127,8 +1184,8 @@ ${tikzCode}
                   style={{ pointerEvents: 'none' }}
                 />
                 <text
-                  x={(sourceNode.position.x + targetNode.position.x) / 2}
-                  y={(sourceNode.position.y + targetNode.position.y) / 2 - 10}
+                  x={(coords.x1 + coords.x2) / 2}
+                  y={(coords.y1 + coords.y2) / 2 - 10}
                   textAnchor="middle"
                   fontSize="11"
                   fill={getEdgeColor(edge.type, edge.isResultant)}
