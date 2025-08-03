@@ -24,7 +24,7 @@ interface Edge {
   id: string;
   source: string | null; // null for entry arrows
   target: string | null; // null for exit arrows
-  type: 'PV' | 'VP' | 'PP' | 'VV' | 'sequence' | 'feedback' | 'loop' | 'exit' | 'entry';
+  type: 'PV' | 'VP' | 'PP' | 'VV' | 'PV-suff' | 'PV-nec' | 'VP-suff' | 'VP-nec' | 'PP-suff' | 'PP-nec' | 'VV-suff' | 'VV-nec' | 'sequence' | 'feedback' | 'loop' | 'exit' | 'entry';
   // For entry/exit arrows, store position
   position?: Point;
   // For edges with null source/target, store the endpoint position
@@ -50,6 +50,9 @@ function SimpleApp() {
   const [autoDetectEdges, setAutoDetectEdges] = useState<boolean>(true);
   const [selectedNodeForCustomization, setSelectedNodeForCustomization] = useState<string | null>(null);
   const [showCustomizationPanel, setShowCustomizationPanel] = useState<boolean>(false);
+  const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
+  const [selectedEdgeForModification, setSelectedEdgeForModification] = useState<string | null>(null);
+  const [showEdgeModificationPanel, setShowEdgeModificationPanel] = useState<boolean>(false);
 
   // Global mouse event handling for better drag behavior
   useEffect(() => {
@@ -110,13 +113,20 @@ function SimpleApp() {
     }
   };
 
-  const getAvailableEdgeTypes = (mode: DiagramMode, sourceType?: string, targetType?: string): Edge['type'][] => {
+  const getAvailableEdgeTypes = (mode: DiagramMode, sourceType?: string, targetType?: string, isAutoDetect: boolean = true): Edge['type'][] => {
     if (mode === 'MUD') {
-      return ['PV', 'VP', 'PP', 'VV'];
+      if (isAutoDetect) {
+        return ['PV', 'VP', 'PP', 'VV'];
+      } else {
+        // Manual mode: return qualified types
+        return ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'];
+      }
     } else if (mode === 'TOTE') {
       return ['sequence', 'feedback', 'loop', 'exit', 'entry'];
     } else {
-      return ['PV', 'VP', 'PP', 'VV', 'sequence', 'feedback', 'loop', 'exit', 'entry'];
+      // HYBRID mode
+      const mudTypes = isAutoDetect ? ['PV', 'VP', 'PP', 'VV'] : ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'];
+      return [...mudTypes, 'sequence', 'feedback', 'loop', 'exit', 'entry'];
     }
   };
 
@@ -157,6 +167,31 @@ function SimpleApp() {
       background: node.style?.backgroundColor || defaults.background,
       border: node.style?.borderColor || defaults.border
     };
+  };
+
+  // Helper functions for qualified edge types
+  const isQualifiedMudEdge = (edgeType: string): boolean => {
+    return edgeType.includes('-suff') || edgeType.includes('-nec');
+  };
+
+  const getBaseEdgeType = (edgeType: string): string => {
+    return edgeType.replace('-suff', '').replace('-nec', '');
+  };
+
+  const getEdgeQualifier = (edgeType: string): 'suff' | 'nec' | null => {
+    if (edgeType.includes('-suff')) return 'suff';
+    if (edgeType.includes('-nec')) return 'nec';
+    return null;
+  };
+
+  const getQualifiedEdgeTypes = (baseType: string): Edge['type'][] => {
+    return [`${baseType}-suff` as Edge['type'], `${baseType}-nec` as Edge['type']];
+  };
+
+  const shouldShowArrowhead = (edgeType: string): boolean => {
+    // Show arrowheads for qualified MUD edges and all TOTE edges (except entry)
+    return isQualifiedMudEdge(edgeType) || 
+           ['sequence', 'feedback', 'loop', 'exit'].includes(edgeType);
   };
 
   const handleModeChange = (newMode: DiagramMode) => {
@@ -238,7 +273,7 @@ function SimpleApp() {
           setEdges([...edges, newEdge]);
           setSelectedNodes([]);
         } else {
-          // Show edge type selector for manual selection
+          // Show edge type selector for manual selection (always for TOTE or manual MUD)
           setPendingEdge({ source: selectedNodes[0], target: nodeId });
           setShowEdgeTypeSelector(true);
           setSelectedNodes([]);
@@ -345,6 +380,39 @@ function SimpleApp() {
       }
       return node;
     }));
+  };
+
+  // Edge modification functions
+  const handleEdgeClick = (edgeId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (selectedTool === 'select') {
+      setSelectedEdges([edgeId]);
+    }
+  };
+
+  const openEdgeModificationPanel = (edgeId: string) => {
+    setSelectedEdgeForModification(edgeId);
+    setShowEdgeModificationPanel(true);
+  };
+
+  const closeEdgeModificationPanel = () => {
+    setSelectedEdgeForModification(null);
+    setShowEdgeModificationPanel(false);
+  };
+
+  const updateEdgeType = (edgeId: string, newType: Edge['type']) => {
+    setEdges(edges.map(edge => {
+      if (edge.id === edgeId) {
+        return { ...edge, type: newType };
+      }
+      return edge;
+    }));
+  };
+
+  const deleteEdge = (edgeId: string) => {
+    setEdges(edges.filter(edge => edge.id !== edgeId));
+    setSelectedEdges([]);
+    closeEdgeModificationPanel();
   };
 
   // Export functions
@@ -555,20 +623,37 @@ ${tikzCode}
   };
 
   const getEdgeColor = (type: string) => {
-    switch (type) {
-      // MUD relations
-      case 'PV': return '#4CAF50'; // Green
-      case 'VP': return '#FF9800'; // Orange  
-      case 'PP': return '#9C27B0'; // Purple
-      case 'VV': return '#F44336'; // Red
+    const baseType = getBaseEdgeType(type);
+    const qualifier = getEdgeQualifier(type);
+    
+    // Base colors for MUD relations
+    let baseColor;
+    switch (baseType) {
+      case 'PV': baseColor = '#4CAF50'; break; // Green
+      case 'VP': baseColor = '#FF9800'; break; // Orange  
+      case 'PP': baseColor = '#9C27B0'; break; // Purple
+      case 'VV': baseColor = '#F44336'; break; // Red
       // TOTE relations
-      case 'sequence': return '#2196F3'; // Blue
-      case 'feedback': return '#FF5722'; // Deep Orange
-      case 'loop': return '#607D8B'; // Blue Grey
-      case 'exit': return '#8BC34A'; // Light Green
-      case 'entry': return '#4CAF50'; // Green
-      default: return '#666';
+      case 'sequence': baseColor = '#2196F3'; break; // Blue
+      case 'feedback': baseColor = '#FF5722'; break; // Deep Orange
+      case 'loop': baseColor = '#607D8B'; break; // Blue Grey
+      case 'exit': baseColor = '#8BC34A'; break; // Light Green
+      case 'entry': baseColor = '#4CAF50'; break; // Green
+      default: baseColor = '#666'; break;
     }
+    
+    // Modify color based on qualifier
+    if (qualifier === 'suff') {
+      return baseColor; // Keep original color for sufficient
+    } else if (qualifier === 'nec') {
+      // Darker/more saturated for necessary
+      return baseColor.replace('#4CAF50', '#2E7D32') // Darker green
+                     .replace('#FF9800', '#E65100') // Darker orange
+                     .replace('#9C27B0', '#6A1B9A') // Darker purple
+                     .replace('#F44336', '#C62828'); // Darker red
+    }
+    
+    return baseColor;
   };
 
   return (
@@ -813,16 +898,21 @@ ${tikzCode}
                   x2={targetNode.position.x}
                   y2={targetNode.position.y}
                   stroke={getEdgeColor(edge.type)}
-                  strokeWidth="2"
-                  markerEnd="url(#arrowhead)"
+                  strokeWidth={selectedEdges.includes(edge.id) ? "4" : "2"}
+                  strokeDasharray={getEdgeQualifier(edge.type) === 'nec' ? '5,5' : 'none'}
+                  markerEnd={shouldShowArrowhead(edge.type) ? "url(#arrowhead)" : 'none'}
+                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => handleEdgeClick(edge.id, e)}
                 />
                 <text
                   x={(sourceNode.position.x + targetNode.position.x) / 2}
                   y={(sourceNode.position.y + targetNode.position.y) / 2 - 10}
                   textAnchor="middle"
-                  fontSize="12"
+                  fontSize="11"
                   fill={getEdgeColor(edge.type)}
                   fontWeight="bold"
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={(e) => handleEdgeClick(edge.id, e)}
                 >
                   {edge.type}
                 </text>
@@ -1051,7 +1141,29 @@ ${tikzCode}
               zIndex: 1000
             }}
           >
-            🎨 Customize
+            🎨 Customize Node
+          </button>
+        )}
+
+        {/* Modify button for selected edges */}
+        {selectedTool === 'select' && selectedEdges.length === 1 && (
+          <button
+            onClick={() => openEdgeModificationPanel(selectedEdges[0])}
+            style={{
+              position: 'absolute',
+              top: '50px',
+              right: '10px',
+              padding: '8px 16px',
+              background: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              zIndex: 1000
+            }}
+          >
+            ⚙️ Modify Edge
           </button>
         )}
 
@@ -1079,15 +1191,26 @@ ${tikzCode}
               <h3 style={{ margin: '0 0 16px 0', color: '#333' }}>Select Edge Type</h3>
               
               <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
-                {getAvailableEdgeTypes(diagramMode).map(edgeType => {
+                {getAvailableEdgeTypes(diagramMode, undefined, undefined, autoDetectEdges).map(edgeType => {
                   const sourceNode = nodes.find(n => n.id === pendingEdge.source);
                   const targetNode = nodes.find(n => n.id === pendingEdge.target);
                   
                   let description = '';
+                  // Simple MUD relations
                   if (edgeType === 'PV') description = 'Practice → Vocabulary';
                   else if (edgeType === 'VP') description = 'Vocabulary → Practice';
                   else if (edgeType === 'PP') description = 'Practice → Practice';
                   else if (edgeType === 'VV') description = 'Vocabulary → Vocabulary';
+                  // Qualified MUD relations
+                  else if (edgeType === 'PV-suff') description = 'Practice → Vocabulary (Sufficient)';
+                  else if (edgeType === 'PV-nec') description = 'Practice → Vocabulary (Necessary)';
+                  else if (edgeType === 'VP-suff') description = 'Vocabulary → Practice (Sufficient)';
+                  else if (edgeType === 'VP-nec') description = 'Vocabulary → Practice (Necessary)';
+                  else if (edgeType === 'PP-suff') description = 'Practice → Practice (Sufficient)';
+                  else if (edgeType === 'PP-nec') description = 'Practice → Practice (Necessary)';
+                  else if (edgeType === 'VV-suff') description = 'Vocabulary → Vocabulary (Sufficient)';
+                  else if (edgeType === 'VV-nec') description = 'Vocabulary → Vocabulary (Necessary)';
+                  // TOTE relations
                   else if (edgeType === 'sequence') description = 'Sequential action';
                   else if (edgeType === 'feedback') description = 'Feedback loop';
                   else if (edgeType === 'loop') description = 'Iterative loop';
@@ -1263,6 +1386,116 @@ ${tikzCode}
                           padding: '10px 16px',
                           border: '2px solid #4CAF50',
                           background: '#4CAF50',
+                          color: 'white',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Edge Modification Panel */}
+        {showEdgeModificationPanel && selectedEdgeForModification && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000
+          }}>
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              boxShadow: '0 12px 48px rgba(0, 0, 0, 0.3)',
+              minWidth: '320px',
+              maxWidth: '400px'
+            }}>
+              {(() => {
+                const edge = edges.find(e => e.id === selectedEdgeForModification);
+                if (!edge) return null;
+                const sourceNode = nodes.find(n => n.id === edge.source);
+                const targetNode = nodes.find(n => n.id === edge.target);
+                
+                return (
+                  <>
+                    <h3 style={{ margin: '0 0 20px 0', color: '#333', textAlign: 'center' }}>
+                      Modify Edge: {edge.type}
+                    </h3>
+                    
+                    {sourceNode && targetNode && (
+                      <div style={{ marginBottom: '20px', fontSize: '14px', color: '#666', textAlign: 'center' }}>
+                        {sourceNode.label} → {targetNode.label}
+                      </div>
+                    )}
+                    
+                    {/* Edge Type Selection */}
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={{ display: 'block', marginBottom: '12px', fontWeight: 'bold', color: '#666' }}>
+                        Edge Type:
+                      </label>
+                      <div style={{ display: 'grid', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                        {getAvailableEdgeTypes(diagramMode, sourceNode?.type, targetNode?.type, autoDetectEdges).map(edgeType => (
+                          <button
+                            key={edgeType}
+                            onClick={() => updateEdgeType(selectedEdgeForModification, edgeType)}
+                            style={{
+                              padding: '8px 12px',
+                              border: `2px solid ${edge.type === edgeType ? '#2196F3' : '#ddd'}`,
+                              background: edge.type === edgeType ? '#E3F2FD' : '#f9f9f9',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              fontSize: '12px',
+                              fontWeight: edge.type === edgeType ? 'bold' : 'normal'
+                            }}
+                          >
+                            <div style={{ color: getEdgeColor(edgeType), fontWeight: 'bold' }}>{edgeType}</div>
+                            <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                              {edgeType.includes('-suff') ? 'Sufficient relation' : 
+                               edgeType.includes('-nec') ? 'Necessary relation' : 
+                               'Basic relation'}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
+                      <button
+                        onClick={() => deleteEdge(selectedEdgeForModification)}
+                        style={{
+                          padding: '10px 16px',
+                          border: '2px solid #f44336',
+                          background: '#ffebee',
+                          color: '#f44336',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        🗑️ Delete
+                      </button>
+                      <button
+                        onClick={closeEdgeModificationPanel}
+                        style={{
+                          padding: '10px 16px',
+                          border: '2px solid #2196F3',
+                          background: '#2196F3',
                           color: 'white',
                           borderRadius: '6px',
                           cursor: 'pointer',
