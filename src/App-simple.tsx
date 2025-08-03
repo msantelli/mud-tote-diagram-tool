@@ -67,12 +67,12 @@ function SimpleApp() {
       if (draggedNode && selectedTool === 'select' && canvasRef.current) {
         event.preventDefault();
         const canvasRect = canvasRef.current.getBoundingClientRect();
-        const screenPos = { x: event.clientX - canvasRect.left - dragOffset.x, y: event.clientY - canvasRect.top - dragOffset.y };
+        const screenPos = { x: event.clientX - canvasRect.left, y: event.clientY - canvasRect.top };
         const worldPos = screenToWorld(screenPos);
         
         setNodes(prevNodes => prevNodes.map(node =>
           node.id === draggedNode
-            ? { ...node, position: worldPos }
+            ? { ...node, position: { x: worldPos.x - dragOffset.x, y: worldPos.y - dragOffset.y } }
             : node
         ));
       } else if (isPanning && canvasRef.current) {
@@ -443,9 +443,11 @@ function SimpleApp() {
       const canvasRect = canvasRef.current.getBoundingClientRect();
       
       setDraggedNode(nodeId);
+      const screenPos = { x: event.clientX - canvasRect.left, y: event.clientY - canvasRect.top };
+      const worldPos = screenToWorld(screenPos);
       setDragOffset({
-        x: event.clientX - canvasRect.left - node.position.x,
-        y: event.clientY - canvasRect.top - node.position.y
+        x: worldPos.x - node.position.x,
+        y: worldPos.y - node.position.y
       });
     }
   };
