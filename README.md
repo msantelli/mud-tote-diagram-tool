@@ -31,7 +31,9 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 - **Flow Relations**: Sequence, feedback, loop, and exit connections
 
 ### 🎨 **Visual Customization**
-- **Node Styling**: Size variants (small/medium/large) and custom colors
+- **Node Styling**: Size variants (small/medium/large), custom colors, and text color customization
+- **Text Appearance**: Default black text with full color picker for customization
+- **Arrow Precision**: Accurate arrowhead positioning for all node types and edge combinations
 - **Smart Visual Coding**: 
   - Sufficient relations: Solid lines with standard colors
   - Necessary relations: Solid lines with darker colors
@@ -129,6 +131,7 @@ Based on Miller, Galanter, and Pribram's **Plans and the Structure of Behavior**
   - Size: Small (0.8×), Medium (1×), Large (1.3×)
   - Background Color: Full color picker
   - Border Color: Custom border styling
+  - Text Color: Full color picker (defaults to black)
 - **Reset**: Return to default styling
 
 #### Edge Modification
@@ -176,7 +179,8 @@ Modern browsers with ES2020+ support required.
       "style": {
         "size": "medium",
         "backgroundColor": "#E3F2FD",
-        "borderColor": "#1976D2"
+        "borderColor": "#1976D2",
+        "textColor": "#000000"
       }
     }
   ],
