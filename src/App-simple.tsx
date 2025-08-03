@@ -6,11 +6,18 @@ interface Point {
   y: number;
 }
 
+interface NodeStyle {
+  size: 'small' | 'medium' | 'large';
+  backgroundColor?: string;
+  borderColor?: string;
+}
+
 interface Node {
   id: string;
   type: 'vocabulary' | 'practice' | 'test' | 'operate';
   position: Point;
   label: string;
+  style?: NodeStyle;
 }
 
 interface Edge {
@@ -41,6 +48,8 @@ function SimpleApp() {
   const [showEdgeTypeSelector, setShowEdgeTypeSelector] = useState<boolean>(false);
   const [pendingEdge, setPendingEdge] = useState<{source: string, target: string} | null>(null);
   const [autoDetectEdges, setAutoDetectEdges] = useState<boolean>(true);
+  const [selectedNodeForCustomization, setSelectedNodeForCustomization] = useState<string | null>(null);
+  const [showCustomizationPanel, setShowCustomizationPanel] = useState<boolean>(false);
 
   // Global mouse event handling for better drag behavior
   useEffect(() => {
@@ -48,14 +57,18 @@ function SimpleApp() {
       if (draggedNode && selectedTool === 'select' && canvasRef.current) {
         event.preventDefault();
         const canvasRect = canvasRef.current.getBoundingClientRect();
-        const newX = Math.max(50, Math.min(canvasRect.width - 50, event.clientX - canvasRect.left - dragOffset.x));
-        const newY = Math.max(25, Math.min(canvasRect.height - 25, event.clientY - canvasRect.top - dragOffset.y));
+        const draggedNodeObj = nodes.find(n => n.id === draggedNode);
+        if (draggedNodeObj) {
+          const dimensions = getNodeDimensions(draggedNodeObj);
+          const newX = Math.max(dimensions.radius, Math.min(canvasRect.width - dimensions.radius, event.clientX - canvasRect.left - dragOffset.x));
+          const newY = Math.max(dimensions.height / 2, Math.min(canvasRect.height - dimensions.height / 2, event.clientY - canvasRect.top - dragOffset.y));
         
-        setNodes(prevNodes => prevNodes.map(node =>
-          node.id === draggedNode
-            ? { ...node, position: { x: newX, y: newY } }
-            : node
-        ));
+          setNodes(prevNodes => prevNodes.map(node =>
+            node.id === draggedNode
+              ? { ...node, position: { x: newX, y: newY } }
+              : node
+          ));
+        }
       }
     };
 
@@ -105,6 +118,45 @@ function SimpleApp() {
     } else {
       return ['PV', 'VP', 'PP', 'VV', 'sequence', 'feedback', 'loop', 'exit', 'entry'];
     }
+  };
+
+  // Helper functions for node styling
+  const getNodeDimensions = (node: Node) => {
+    const size = node.style?.size || 'medium';
+    const sizeMultiplier = size === 'small' ? 0.8 : size === 'large' ? 1.3 : 1;
+    
+    if (node.type === 'test') {
+      const baseSize = 70;
+      const adjustedSize = Math.round(baseSize * sizeMultiplier);
+      return {
+        width: adjustedSize,
+        height: adjustedSize,
+        radius: adjustedSize / 2
+      };
+    } else {
+      const baseWidth = 100;
+      const baseHeight = 50;
+      return {
+        width: Math.round(baseWidth * sizeMultiplier),
+        height: Math.round(baseHeight * sizeMultiplier),
+        radius: Math.round(baseWidth * sizeMultiplier / 2)
+      };
+    }
+  };
+
+  const getNodeColors = (node: Node) => {
+    const defaultColors = {
+      vocabulary: { background: '#E3F2FD', border: '#1976D2' },
+      practice: { background: '#FFF3E0', border: '#F57C00' },
+      test: { background: '#E8F5E8', border: '#4CAF50' },
+      operate: { background: '#FFF8E1', border: '#FFC107' }
+    };
+
+    const defaults = defaultColors[node.type];
+    return {
+      background: node.style?.backgroundColor || defaults.background,
+      border: node.style?.borderColor || defaults.border
+    };
   };
 
   const handleModeChange = (newMode: DiagramMode) => {
@@ -262,6 +314,39 @@ function SimpleApp() {
     setShowEdgeTypeSelector(false);
   };
 
+  // Node customization functions
+  const openCustomizationPanel = (nodeId: string) => {
+    setSelectedNodeForCustomization(nodeId);
+    setShowCustomizationPanel(true);
+  };
+
+  const closeCustomizationPanel = () => {
+    setSelectedNodeForCustomization(null);
+    setShowCustomizationPanel(false);
+  };
+
+  const updateNodeStyle = (nodeId: string, styleUpdate: Partial<NodeStyle>) => {
+    setNodes(nodes.map(node => {
+      if (node.id === nodeId) {
+        return {
+          ...node,
+          style: { ...node.style, ...styleUpdate }
+        };
+      }
+      return node;
+    }));
+  };
+
+  const resetNodeStyle = (nodeId: string) => {
+    setNodes(nodes.map(node => {
+      if (node.id === nodeId) {
+        const { style, ...nodeWithoutStyle } = node;
+        return nodeWithoutStyle;
+      }
+      return node;
+    }));
+  };
+
   // Export functions
   const exportAsJSON = () => {
     const diagram = {
@@ -318,32 +403,31 @@ function SimpleApp() {
         
         <!-- Nodes -->
         ${nodes.map(node => {
-          const bgColor = node.type === 'vocabulary' ? '#E3F2FD' : 
-                         node.type === 'practice' ? '#FFF3E0' :
-                         node.type === 'test' ? '#E8F5E8' : '#FFF8E1';
-          const borderColor = node.type === 'vocabulary' ? '#1976D2' : 
-                             node.type === 'practice' ? '#F57C00' :
-                             node.type === 'test' ? '#4CAF50' : '#FFC107';
+          const colors = getNodeColors(node);
+          const dimensions = getNodeDimensions(node);
+          const bgColor = colors.background;
+          const borderColor = colors.border;
           
           if (node.type === 'vocabulary') {
             return `
               <ellipse cx="${node.position.x}" cy="${node.position.y}" 
-                       rx="50" ry="25" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
+                       rx="${dimensions.radius}" ry="${dimensions.height/2}" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
               <text x="${node.position.x}" y="${node.position.y + 5}" 
                     text-anchor="middle" font-size="12" font-weight="bold">${node.label}</text>
             `;
           } else if (node.type === 'test') {
+            const halfSize = dimensions.width / 2;
             return `
               <g transform="translate(${node.position.x}, ${node.position.y}) rotate(45)">
-                <rect x="-35" y="-35" width="70" height="70" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
+                <rect x="-${halfSize}" y="-${halfSize}" width="${dimensions.width}" height="${dimensions.height}" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
               </g>
               <text x="${node.position.x}" y="${node.position.y + 5}" 
                     text-anchor="middle" font-size="12" font-weight="bold">${node.label}</text>
             `;
           } else {
             return `
-              <rect x="${node.position.x - 50}" y="${node.position.y - 25}" 
-                    width="100" height="50" rx="8" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
+              <rect x="${node.position.x - dimensions.radius}" y="${node.position.y - dimensions.height/2}" 
+                    width="${dimensions.width}" height="${dimensions.height}" rx="8" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
               <text x="${node.position.x}" y="${node.position.y + 5}" 
                     text-anchor="middle" font-size="12" font-weight="bold">${node.label}</text>
             `;
@@ -770,18 +854,13 @@ ${tikzCode}
             onMouseDown={(e) => handleMouseDown(node.id, e)}
             style={{
               position: 'absolute',
-              left: node.position.x - 50,
-              top: node.position.y - 25,
-              width: 100,
-              height: 50,
-              background: node.type === 'vocabulary' ? '#E3F2FD' : 
-                         node.type === 'practice' ? '#FFF3E0' :
-                         node.type === 'test' ? '#E8F5E8' : '#FFF8E1',
+              left: node.position.x - getNodeDimensions(node).radius,
+              top: node.position.y - getNodeDimensions(node).height / 2,
+              width: getNodeDimensions(node).width,
+              height: getNodeDimensions(node).height,
+              background: getNodeColors(node).background,
               border: `3px solid ${
-                selectedNodes.includes(node.id) ? '#2196F3' :
-                node.type === 'vocabulary' ? '#1976D2' : 
-                node.type === 'practice' ? '#F57C00' :
-                node.type === 'test' ? '#4CAF50' : '#FFC107'
+                selectedNodes.includes(node.id) ? '#2196F3' : getNodeColors(node).border
               }`,
               borderRadius: node.type === 'vocabulary' ? '50%' : 
                            node.type === 'test' ? '0' : '8px',
@@ -954,6 +1033,28 @@ ${tikzCode}
           </div>
         )}
 
+        {/* Customize button for selected nodes */}
+        {selectedTool === 'select' && selectedNodes.length === 1 && (
+          <button
+            onClick={() => openCustomizationPanel(selectedNodes[0])}
+            style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              padding: '8px 16px',
+              background: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              zIndex: 1000
+            }}
+          >
+            🎨 Customize
+          </button>
+        )}
+
         {/* Edge Type Selector Modal */}
         {showEdgeTypeSelector && pendingEdge && (
           <div style={{
@@ -1038,6 +1139,142 @@ ${tikzCode}
                   Cancel
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Node Customization Panel */}
+        {showCustomizationPanel && selectedNodeForCustomization && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000
+          }}>
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              boxShadow: '0 12px 48px rgba(0, 0, 0, 0.3)',
+              minWidth: '320px',
+              maxWidth: '400px'
+            }}>
+              {(() => {
+                const node = nodes.find(n => n.id === selectedNodeForCustomization);
+                if (!node) return null;
+                const currentStyle = node.style || { size: 'medium' };
+                
+                return (
+                  <>
+                    <h3 style={{ margin: '0 0 20px 0', color: '#333', textAlign: 'center' }}>
+                      Customize {node.type.charAt(0).toUpperCase() + node.type.slice(1)} Node
+                    </h3>
+                    
+                    {/* Size Selection */}
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#666' }}>
+                        Size:
+                      </label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {(['small', 'medium', 'large'] as const).map(size => (
+                          <button
+                            key={size}
+                            onClick={() => updateNodeStyle(selectedNodeForCustomization, { size })}
+                            style={{
+                              flex: 1,
+                              padding: '8px 12px',
+                              border: `2px solid ${currentStyle.size === size ? '#4CAF50' : '#ddd'}`,
+                              background: currentStyle.size === size ? '#E8F5E8' : '#f9f9f9',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              textTransform: 'capitalize',
+                              fontWeight: currentStyle.size === size ? 'bold' : 'normal'
+                            }}
+                          >
+                            {size}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Background Color */}
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#666' }}>
+                        Background Color:
+                      </label>
+                      <input
+                        type="color"
+                        value={getNodeColors(node).background}
+                        onChange={(e) => updateNodeStyle(selectedNodeForCustomization, { backgroundColor: e.target.value })}
+                        style={{
+                          width: '100%',
+                          height: '40px',
+                          border: '2px solid #ddd',
+                          borderRadius: '6px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                    </div>
+
+                    {/* Border Color */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#666' }}>
+                        Border Color:
+                      </label>
+                      <input
+                        type="color"
+                        value={getNodeColors(node).border}
+                        onChange={(e) => updateNodeStyle(selectedNodeForCustomization, { borderColor: e.target.value })}
+                        style={{
+                          width: '100%',
+                          height: '40px',
+                          border: '2px solid #ddd',
+                          borderRadius: '6px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
+                      <button
+                        onClick={() => resetNodeStyle(selectedNodeForCustomization)}
+                        style={{
+                          padding: '10px 16px',
+                          border: '2px solid #FF9800',
+                          background: '#FFF3E0',
+                          color: '#FF9800',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        Reset to Default
+                      </button>
+                      <button
+                        onClick={closeCustomizationPanel}
+                        style={{
+                          padding: '10px 16px',
+                          border: '2px solid #4CAF50',
+                          background: '#4CAF50',
+                          color: 'white',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
