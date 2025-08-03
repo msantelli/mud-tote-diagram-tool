@@ -322,16 +322,50 @@ function SimpleApp() {
       return { x1: 0, y1: 0, x2: 0, y2: 0 };
     }
 
-    // Find all edges between the same pair of nodes (limit to 3 for performance)
-    const parallelEdges = allEdges.filter(e => 
+    // Find edges in the same direction (truly parallel)
+    const sameDirectionEdges = allEdges.filter(e => 
       e.id !== undefined && e.source && e.target && // Only consider valid edges with both source and target
-      ((e.source === edge.source && e.target === edge.target) ||
-       (e.source === edge.target && e.target === edge.source))
+      e.source === edge.source && e.target === edge.target
     );
     
-    // Sort by ID for consistent ordering, then limit to 3
-    parallelEdges.sort((a, b) => a.id.localeCompare(b.id));
-    const limitedParallelEdges = parallelEdges.slice(0, 3);
+    // Find edges in the opposite direction (bidirectional)
+    const oppositeDirectionEdges = allEdges.filter(e => 
+      e.id !== undefined && e.source && e.target && // Only consider valid edges with both source and target
+      e.source === edge.target && e.target === edge.source
+    );
+    
+    // Sort by ID for consistent ordering
+    sameDirectionEdges.sort((a, b) => a.id.localeCompare(b.id));
+    oppositeDirectionEdges.sort((a, b) => a.id.localeCompare(b.id));
+
+    // Handle self-referencing edges (loops) specially
+    if (sourceNode.id === targetNode.id) {
+      // Create a loop that curves above the node
+      const nodeDim = getNodeDimensions(sourceNode);
+      const radius = Math.max(nodeDim.width, nodeDim.height) / 2;
+      
+      // Find all self-referencing edges for this node to space them
+      const selfEdges = allEdges.filter(e => 
+        e.id !== undefined && e.source === sourceNode.id && e.target === sourceNode.id
+      );
+      selfEdges.sort((a, b) => a.id.localeCompare(b.id));
+      const edgeIndex = selfEdges.findIndex(e => e.id === edge.id);
+      
+      // Position loops at different angles around the node
+      const angleOffset = (edgeIndex * 60) - ((selfEdges.length - 1) * 30); // Spread loops around node
+      const angle = (angleOffset * Math.PI) / 180; // Convert to radians
+      
+      // Calculate loop start and end points
+      const startAngle = angle - 0.3; // Start slightly before the main angle
+      const endAngle = angle + 0.3;   // End slightly after the main angle
+      
+      const x1 = sourceNode.position.x + (radius + 10) * Math.cos(startAngle);
+      const y1 = sourceNode.position.y + (radius + 10) * Math.sin(startAngle);
+      const x2 = sourceNode.position.x + (radius + 10) * Math.cos(endAngle);
+      const y2 = sourceNode.position.y + (radius + 10) * Math.sin(endAngle);
+      
+      return { x1, y1, x2, y2 };
+    }
 
     // Calculate base line vector from center to center
     const dx = targetNode.position.x - sourceNode.position.x;
@@ -346,24 +380,34 @@ function SimpleApp() {
 
     // Calculate perpendicular offset for parallel edges
     let perpOffset = 0;
-    if (limitedParallelEdges.length > 1) {
-      const edgeIndex = limitedParallelEdges.findIndex(e => e.id === edge.id);
-      
-      // Check if edge was found in parallel edges (it should be)
-      if (edgeIndex === -1) {
-        console.warn(`Edge ${edge.id} not found in its own parallel edges list!`);
-        return { x1: sourceNode.position.x, y1: sourceNode.position.y, x2: targetNode.position.x, y2: targetNode.position.y };
+    
+    // Handle same-direction (parallel) edges
+    if (sameDirectionEdges.length > 1) {
+      const edgeIndex = sameDirectionEdges.findIndex(e => e.id === edge.id);
+      if (edgeIndex !== -1) {
+        const totalEdges = Math.min(sameDirectionEdges.length, 3); // Limit to 3 for performance
+        const spacing = totalEdges === 2 ? 25 : 30;
+        perpOffset = (edgeIndex - (totalEdges - 1) / 2) * spacing;
       }
+    }
+    
+    // Handle bidirectional edges (opposite directions) - curve them to opposite sides
+    if (oppositeDirectionEdges.length > 0) {
+      // If there are opposite direction edges, curve this edge to one side
+      // and the opposite direction edges will curve to the other side
+      const hasOppositeEdges = oppositeDirectionEdges.length > 0;
       
-      const totalEdges = limitedParallelEdges.length; // Max 3 edges due to slice
-      
-      // Spacing based on number of edges: 2 edges = ±25px, 3 edges = -30, 0, +30px
-      const spacing = totalEdges === 2 ? 25 : 30;
-      perpOffset = (edgeIndex - (totalEdges - 1) / 2) * spacing;
-      
-      // Debug log for parallel edges
-      console.log(`Edge ${edge.id} (${edge.source}->${edge.target}): ${limitedParallelEdges.length} parallel edges, index ${edgeIndex}, offset ${perpOffset}px, spacing ${spacing}px`);
-      console.log('Parallel edge IDs:', limitedParallelEdges.map(e => `${e.id} (${e.source}->${e.target})`));
+      if (hasOppositeEdges) {
+        // Curve same-direction edges to one side (positive offset)
+        const baseCurve = 35; // Base curve amount for bidirectional separation
+        if (sameDirectionEdges.length === 1) {
+          // Single edge in this direction, curve moderately
+          perpOffset = baseCurve;
+        } else {
+          // Multiple edges in same direction, combine parallel spacing with bidirectional curve
+          perpOffset += baseCurve;
+        }
+      }
     }
 
     // Get node dimensions for border calculation
@@ -749,16 +793,32 @@ function SimpleApp() {
           const color = getEdgeColor(edge.type, edge.isResultant);
           const coords = calculateEdgeOffset(edge, edges);
           const dashArray = edge.isResultant ? 'stroke-dasharray="5,5"' : '';
-          return `
-            <line x1="${coords.x1}" y1="${coords.y1}" 
-                  x2="${coords.x2}" y2="${coords.y2}" 
-                  stroke="${color}" stroke-width="2" ${dashArray} marker-end="url(#arrowhead)"/>
-            <text x="${(coords.x1 + coords.x2) / 2}" 
-                  y="${(coords.y1 + coords.y2) / 2 - 10}" 
-                  text-anchor="middle" font-size="12" fill="${color}" font-weight="bold">
-              ${edge.type}
-            </text>
-          `;
+          const isLoop = sourceNode.id === targetNode.id;
+          
+          if (isLoop) {
+            // Use curved path for self-referencing edges
+            return `
+              <path d="M ${coords.x1} ${coords.y1} A 30 30 0 1 1 ${coords.x2} ${coords.y2}" 
+                    stroke="${color}" stroke-width="2" fill="none" ${dashArray} marker-end="url(#arrowhead)"/>
+              <text x="${sourceNode.position.x}" 
+                    y="${sourceNode.position.y - 50}" 
+                    text-anchor="middle" font-size="12" fill="${color}" font-weight="bold">
+                ${edge.type}
+              </text>
+            `;
+          } else {
+            // Use straight line for regular edges
+            return `
+              <line x1="${coords.x1}" y1="${coords.y1}" 
+                    x2="${coords.x2}" y2="${coords.y2}" 
+                    stroke="${color}" stroke-width="2" ${dashArray} marker-end="url(#arrowhead)"/>
+              <text x="${(coords.x1 + coords.x2) / 2}" 
+                    y="${(coords.y1 + coords.y2) / 2 - 10}" 
+                    text-anchor="middle" font-size="12" fill="${color}" font-weight="bold">
+                ${edge.type}
+              </text>
+            `;
+          }
         }).join('')}
         
         <!-- Nodes -->
@@ -1219,34 +1279,65 @@ ${tikzCode}
             // Calculate offset coordinates for parallel edge spacing
             const coords = calculateEdgeOffset(edge, edges);
             
+            // Check if this is a self-referencing edge (loop)
+            const isLoop = sourceNode.id === targetNode.id;
+            
             return (
               <g key={edge.id}>
-                {/* Invisible thicker line for easier clicking */}
-                <line
-                  x1={coords.x1}
-                  y1={coords.y1}
-                  x2={coords.x2}
-                  y2={coords.y2}
-                  stroke="transparent"
-                  strokeWidth="12"
-                  style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-                  onClick={(e) => handleEdgeClick(edge.id, e)}
-                />
-                {/* Visible edge line */}
-                <line
-                  x1={coords.x1}
-                  y1={coords.y1}
-                  x2={coords.x2}
-                  y2={coords.y2}
-                  stroke={getEdgeColor(edge.type, edge.isResultant)}
-                  strokeWidth={selectedEdges.includes(edge.id) ? "4" : "2"}
-                  strokeDasharray={edge.isResultant ? '5,5' : 'none'}
-                  markerEnd={shouldShowArrowhead(edge.type) ? "url(#arrowhead)" : 'none'}
-                  style={{ pointerEvents: 'none' }}
-                />
+                {isLoop ? (
+                  // Curved path for self-referencing edges
+                  <>
+                    {/* Invisible thicker path for easier clicking */}
+                    <path
+                      d={`M ${coords.x1} ${coords.y1} A 30 30 0 1 1 ${coords.x2} ${coords.y2}`}
+                      stroke="transparent"
+                      strokeWidth="12"
+                      fill="none"
+                      style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                      onClick={(e) => handleEdgeClick(edge.id, e)}
+                    />
+                    {/* Visible curved edge */}
+                    <path
+                      d={`M ${coords.x1} ${coords.y1} A 30 30 0 1 1 ${coords.x2} ${coords.y2}`}
+                      stroke={getEdgeColor(edge.type, edge.isResultant)}
+                      strokeWidth={selectedEdges.includes(edge.id) ? "4" : "2"}
+                      strokeDasharray={edge.isResultant ? '5,5' : 'none'}
+                      fill="none"
+                      markerEnd={shouldShowArrowhead(edge.type) ? "url(#arrowhead)" : 'none'}
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  </>
+                ) : (
+                  // Straight line for regular edges
+                  <>
+                    {/* Invisible thicker line for easier clicking */}
+                    <line
+                      x1={coords.x1}
+                      y1={coords.y1}
+                      x2={coords.x2}
+                      y2={coords.y2}
+                      stroke="transparent"
+                      strokeWidth="12"
+                      style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                      onClick={(e) => handleEdgeClick(edge.id, e)}
+                    />
+                    {/* Visible edge line */}
+                    <line
+                      x1={coords.x1}
+                      y1={coords.y1}
+                      x2={coords.x2}
+                      y2={coords.y2}
+                      stroke={getEdgeColor(edge.type, edge.isResultant)}
+                      strokeWidth={selectedEdges.includes(edge.id) ? "4" : "2"}
+                      strokeDasharray={edge.isResultant ? '5,5' : 'none'}
+                      markerEnd={shouldShowArrowhead(edge.type) ? "url(#arrowhead)" : 'none'}
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  </>
+                )}
                 <text
-                  x={(coords.x1 + coords.x2) / 2}
-                  y={(coords.y1 + coords.y2) / 2 - 10}
+                  x={isLoop ? sourceNode.position.x : (coords.x1 + coords.x2) / 2}
+                  y={isLoop ? sourceNode.position.y - 50 : (coords.y1 + coords.y2) / 2 - 10}
                   textAnchor="middle"
                   fontSize="11"
                   fill={getEdgeColor(edge.type, edge.isResultant)}
