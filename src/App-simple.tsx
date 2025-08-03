@@ -90,6 +90,35 @@ function SimpleApp() {
     };
   }, [draggedNode, selectedTool, dragOffset]);
 
+  // Keyboard event handling for deletion
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        
+        // Delete selected nodes
+        if (selectedNodes.length > 0) {
+          selectedNodes.forEach(nodeId => {
+            deleteNode(nodeId);
+          });
+        }
+        
+        // Delete selected edges
+        if (selectedEdges.length > 0) {
+          selectedEdges.forEach(edgeId => {
+            setEdges(edges.filter(edge => edge.id !== edgeId));
+          });
+          setSelectedEdges([]);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedNodes, selectedEdges, nodes, edges]);
+
   // Mode-specific helper functions
   const getAvailableTools = (mode: DiagramMode) => {
     switch (mode) {
@@ -236,6 +265,7 @@ function SimpleApp() {
       const y = event.clientY - rect.top;
       addNode(x, y);
       setSelectedNodes([]);
+      setSelectedEdges([]); // Clear edge selections too
     }
   };
 
@@ -385,8 +415,11 @@ function SimpleApp() {
   // Edge modification functions
   const handleEdgeClick = (edgeId: string, event: React.MouseEvent) => {
     event.stopPropagation();
+    event.preventDefault();
+    
     if (selectedTool === 'select') {
       setSelectedEdges([edgeId]);
+      setSelectedNodes([]); // Clear node selection when selecting edges
     }
   };
 
@@ -413,6 +446,16 @@ function SimpleApp() {
     setEdges(edges.filter(edge => edge.id !== edgeId));
     setSelectedEdges([]);
     closeEdgeModificationPanel();
+  };
+
+  const deleteNode = (nodeId: string) => {
+    // Remove the node
+    setNodes(nodes.filter(node => node.id !== nodeId));
+    // Remove any edges connected to this node
+    setEdges(edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId));
+    // Clear selections
+    setSelectedNodes([]);
+    closeCustomizationPanel();
   };
 
   // Export functions
@@ -830,7 +873,7 @@ ${tikzCode}
         }}
       >
         {/* Render edges first (behind nodes) */}
-        <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+        <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'auto' }}>
           {edges.map(edge => {
             // Handle entry and exit arrows
             if (edge.type === 'entry' && edge.entryPoint) {
@@ -892,6 +935,18 @@ ${tikzCode}
             
             return (
               <g key={edge.id}>
+                {/* Invisible thicker line for easier clicking */}
+                <line
+                  x1={sourceNode.position.x}
+                  y1={sourceNode.position.y}
+                  x2={targetNode.position.x}
+                  y2={targetNode.position.y}
+                  stroke="transparent"
+                  strokeWidth="12"
+                  style={{ cursor: 'pointer' }}
+                  onClick={(e) => handleEdgeClick(edge.id, e)}
+                />
+                {/* Visible edge line */}
                 <line
                   x1={sourceNode.position.x}
                   y1={sourceNode.position.y}
@@ -901,8 +956,7 @@ ${tikzCode}
                   strokeWidth={selectedEdges.includes(edge.id) ? "4" : "2"}
                   strokeDasharray={getEdgeQualifier(edge.type) === 'nec' ? '5,5' : 'none'}
                   markerEnd={shouldShowArrowhead(edge.type) ? "url(#arrowhead)" : 'none'}
-                  style={{ cursor: 'pointer' }}
-                  onClick={(e) => handleEdgeClick(edge.id, e)}
+                  style={{ pointerEvents: 'none' }}
                 />
                 <text
                   x={(sourceNode.position.x + targetNode.position.x) / 2}
@@ -1365,31 +1419,48 @@ ${tikzCode}
                     </div>
 
                     {/* Action Buttons */}
-                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between' }}>
                       <button
                         onClick={() => resetNodeStyle(selectedNodeForCustomization)}
                         style={{
-                          padding: '10px 16px',
+                          padding: '8px 12px',
                           border: '2px solid #FF9800',
                           background: '#FFF3E0',
                           color: '#FF9800',
                           borderRadius: '6px',
                           cursor: 'pointer',
-                          fontWeight: 'bold'
+                          fontWeight: 'bold',
+                          fontSize: '12px'
                         }}
                       >
-                        Reset to Default
+                        Reset Style
+                      </button>
+                      <button
+                        onClick={() => deleteNode(selectedNodeForCustomization)}
+                        style={{
+                          padding: '8px 12px',
+                          border: '2px solid #f44336',
+                          background: '#ffebee',
+                          color: '#f44336',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '12px'
+                        }}
+                      >
+                        🗑️ Delete Node
                       </button>
                       <button
                         onClick={closeCustomizationPanel}
                         style={{
-                          padding: '10px 16px',
+                          padding: '8px 12px',
                           border: '2px solid #4CAF50',
                           background: '#4CAF50',
                           color: 'white',
                           borderRadius: '6px',
                           cursor: 'pointer',
-                          fontWeight: 'bold'
+                          fontWeight: 'bold',
+                          fontSize: '12px'
                         }}
                       >
                         Done
