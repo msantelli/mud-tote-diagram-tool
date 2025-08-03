@@ -873,7 +873,7 @@ ${tikzCode}
         }}
       >
         {/* Render edges first (behind nodes) */}
-        <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'auto' }}>
+        <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
           {edges.map(edge => {
             // Handle entry and exit arrows
             if (edge.type === 'entry' && edge.entryPoint) {
@@ -887,6 +887,8 @@ ${tikzCode}
                     stroke={getEdgeColor(edge.type)}
                     strokeWidth="3"
                     markerEnd="url(#arrowhead)"
+                    style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                    onClick={(e) => handleEdgeClick(edge.id, e)}
                   />
                   <text
                     x={edge.entryPoint.x - 50}
@@ -895,6 +897,8 @@ ${tikzCode}
                     fontSize="12"
                     fill={getEdgeColor(edge.type)}
                     fontWeight="bold"
+                    style={{ cursor: 'pointer', userSelect: 'none', pointerEvents: 'auto' }}
+                    onClick={(e) => handleEdgeClick(edge.id, e)}
                   >
                     ENTRY
                   </text>
@@ -913,6 +917,8 @@ ${tikzCode}
                     stroke={getEdgeColor(edge.type)}
                     strokeWidth="3"
                     markerEnd="url(#arrowhead)"
+                    style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                    onClick={(e) => handleEdgeClick(edge.id, e)}
                   />
                   <text
                     x={edge.exitPoint.x + 50}
@@ -921,6 +927,8 @@ ${tikzCode}
                     fontSize="12"
                     fill={getEdgeColor(edge.type)}
                     fontWeight="bold"
+                    style={{ cursor: 'pointer', userSelect: 'none', pointerEvents: 'auto' }}
+                    onClick={(e) => handleEdgeClick(edge.id, e)}
                   >
                     EXIT
                   </text>
@@ -943,7 +951,7 @@ ${tikzCode}
                   y2={targetNode.position.y}
                   stroke="transparent"
                   strokeWidth="12"
-                  style={{ cursor: 'pointer' }}
+                  style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                   onClick={(e) => handleEdgeClick(edge.id, e)}
                 />
                 {/* Visible edge line */}
@@ -965,7 +973,7 @@ ${tikzCode}
                   fontSize="11"
                   fill={getEdgeColor(edge.type)}
                   fontWeight="bold"
-                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  style={{ cursor: 'pointer', userSelect: 'none', pointerEvents: 'auto' }}
                   onClick={(e) => handleEdgeClick(edge.id, e)}
                 >
                   {edge.type}
