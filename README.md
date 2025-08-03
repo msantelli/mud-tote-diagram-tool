@@ -255,7 +255,7 @@ npx tsc --noEmit       # Type checking
 When using this tool in academic work, please cite:
 
 ```bibtex
-@software{mud_tote_tool_2024,
+@software{mud_tote_tool_2025,
   title={MUD & TOTE Diagram Tool: Interactive Visualization for Meaning-Use Diagrams and TOTE Cycles},
   author={Mauro Santelli},
   institution={Universidad de Buenos Aires - Instituto de Investigaciones Filosóficas, SADAF (CONICET) - GEML},
