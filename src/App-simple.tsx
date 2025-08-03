@@ -312,7 +312,7 @@ function SimpleApp() {
     return edgeType !== 'entry';
   };
 
-  // Helper function to calculate parallel edge offsets for multiple edges between same nodes
+  // Helper function to calculate edge endpoints at node borders with parallel spacing
   const calculateEdgeOffset = (edge: Edge, allEdges: Edge[]): { x1: number, y1: number, x2: number, y2: number } => {
     const sourceNode = nodes.find(n => n.id === edge.source);
     const targetNode = nodes.find(n => n.id === edge.target);
@@ -321,46 +321,59 @@ function SimpleApp() {
       return { x1: 0, y1: 0, x2: 0, y2: 0 };
     }
 
-    // Find all edges between the same pair of nodes (in both directions)
+    // Find all edges between the same pair of nodes (limit to 3 for performance)
     const parallelEdges = allEdges.filter(e => 
       (e.source === edge.source && e.target === edge.target) ||
       (e.source === edge.target && e.target === edge.source)
-    );
+    ).slice(0, 3); // Limit to maximum 3 parallel edges
 
-    // If only one edge, use direct line
-    if (parallelEdges.length <= 1) {
-      return {
-        x1: sourceNode.position.x,
-        y1: sourceNode.position.y,
-        x2: targetNode.position.x,
-        y2: targetNode.position.y
-      };
-    }
-
-    // Calculate base line vector
+    // Calculate base line vector from center to center
     const dx = targetNode.position.x - sourceNode.position.x;
     const dy = targetNode.position.y - sourceNode.position.y;
     const length = Math.sqrt(dx * dx + dy * dy);
     
     if (length === 0) return { x1: sourceNode.position.x, y1: sourceNode.position.y, x2: targetNode.position.x, y2: targetNode.position.y };
 
-    // Calculate perpendicular vector (normalized)
-    const perpX = -dy / length;
-    const perpY = dx / length;
+    // Normalized direction vector
+    const dirX = dx / length;
+    const dirY = dy / length;
 
-    // Find this edge's index in the parallel edges array
-    const edgeIndex = parallelEdges.findIndex(e => e.id === edge.id);
-    const totalEdges = parallelEdges.length;
+    // Calculate perpendicular offset for parallel edges
+    let perpOffset = 0;
+    if (parallelEdges.length > 1) {
+      
+      const edgeIndex = parallelEdges.findIndex(e => e.id === edge.id);
+      const totalEdges = Math.min(parallelEdges.length, 3); // Max 3 edges
+      
+      // Spacing based on number of edges: 2 edges = ±15px, 3 edges = -20, 0, +20px
+      const spacing = totalEdges === 2 ? 15 : 20;
+      perpOffset = (edgeIndex - (totalEdges - 1) / 2) * spacing;
+    }
+
+    // Get node dimensions for border calculation
+    const sourceDim = getNodeDimensions(sourceNode);
+    const targetDim = getNodeDimensions(targetNode);
+
+    // Calculate radius for edge intersection (account for node shape)
+    const sourceRadius = sourceNode.type === 'vocabulary' ? Math.max(sourceDim.radius, sourceDim.height/2) :
+                        sourceNode.type === 'test' ? sourceDim.radius * 1.2 : // Diamond needs extra space
+                        Math.max(sourceDim.width/2, sourceDim.height/2);
     
-    // Calculate offset: spread edges around the center line
-    const spacing = 20; // pixels between parallel edges
-    const offset = (edgeIndex - (totalEdges - 1) / 2) * spacing;
+    const targetRadius = targetNode.type === 'vocabulary' ? Math.max(targetDim.radius, targetDim.height/2) :
+                        targetNode.type === 'test' ? targetDim.radius * 1.2 :
+                        Math.max(targetDim.width/2, targetDim.height/2);
 
-    // Apply offset to both endpoints
-    const x1 = sourceNode.position.x + perpX * offset;
-    const y1 = sourceNode.position.y + perpY * offset;
-    const x2 = targetNode.position.x + perpX * offset;
-    const y2 = targetNode.position.y + perpY * offset;
+    // Calculate offset centers for parallel edges
+    const sourceCenterX = sourceNode.position.x + (perpOffset * -dy / length);
+    const sourceCenterY = sourceNode.position.y + (perpOffset * dx / length);
+    const targetCenterX = targetNode.position.x + (perpOffset * -dy / length);
+    const targetCenterY = targetNode.position.y + (perpOffset * dx / length);
+
+    // Calculate edge start/end points at node borders (not centers)
+    const x1 = sourceCenterX + dirX * (sourceRadius + 5); // +5px padding from border
+    const y1 = sourceCenterY + dirY * (sourceRadius + 5);
+    const x2 = targetCenterX - dirX * (targetRadius + 5); // -5px padding from border  
+    const y2 = targetCenterY - dirY * (targetRadius + 5);
 
     return { x1, y1, x2, y2 };
   };
