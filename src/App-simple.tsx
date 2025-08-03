@@ -637,8 +637,12 @@ function SimpleApp() {
     setNodes(nodes.filter(node => node.id !== nodeId));
     // Remove any edges connected to this node
     setEdges(edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId));
-    // Clear selections
+    // Clear selections and editing state
     setSelectedNodes([]);
+    if (editingNode === nodeId) {
+      setEditingNode(null);
+      setEditText('');
+    }
     closeCustomizationPanel();
   };
 
@@ -1258,7 +1262,7 @@ ${tikzCode}
         ))}
         
         {/* Inline editor */}
-        {editingNode && (
+        {editingNode && nodes.find(n => n.id === editingNode) && (
           <div style={{
             position: 'absolute',
             left: nodes.find(n => n.id === editingNode)!.position.x - 60,
