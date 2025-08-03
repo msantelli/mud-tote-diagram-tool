@@ -24,7 +24,8 @@ interface Edge {
   id: string;
   source: string | null; // null for entry arrows
   target: string | null; // null for exit arrows
-  type: 'PV' | 'VP' | 'PP' | 'VV' | 'PV-suff' | 'PV-nec' | 'VP-suff' | 'VP-nec' | 'PP-suff' | 'PP-nec' | 'VV-suff' | 'VV-nec' | 'PV-resultant' | 'VP-resultant' | 'PP-resultant' | 'VV-resultant' | 'sequence' | 'feedback' | 'loop' | 'exit' | 'entry';
+  type: 'PV' | 'VP' | 'PP' | 'VV' | 'PV-suff' | 'PV-nec' | 'VP-suff' | 'VP-nec' | 'PP-suff' | 'PP-nec' | 'VV-suff' | 'VV-nec' | 'sequence' | 'feedback' | 'loop' | 'exit' | 'entry';
+  isResultant?: boolean; // Toggle for resultant relationships (dotted lines)
   // For entry/exit arrows, store position
   position?: Point;
   // For edges with null source/target, store the endpoint position
@@ -142,19 +143,19 @@ function SimpleApp() {
     }
   };
 
-  const getAvailableEdgeTypes = (mode: DiagramMode, sourceType?: string, targetType?: string, isAutoDetect: boolean = true): Edge['type'][] => {
+  const getAvailableEdgeTypes = (mode: DiagramMode, _sourceType?: string, _targetType?: string, isAutoDetect: boolean = true): Edge['type'][] => {
     if (mode === 'MUD') {
       if (isAutoDetect) {
         return ['PV', 'VP', 'PP', 'VV'];
       } else {
         // Manual mode: return qualified types
-        return ['PV-suff', 'PV-nec', 'PV-resultant', 'VP-suff', 'VP-nec', 'VP-resultant', 'PP-suff', 'PP-nec', 'PP-resultant', 'VV-suff', 'VV-nec', 'VV-resultant'];
+        return ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'];
       }
     } else if (mode === 'TOTE') {
       return ['sequence', 'feedback', 'loop', 'exit', 'entry'];
     } else {
       // HYBRID mode
-      const mudTypes = isAutoDetect ? ['PV', 'VP', 'PP', 'VV'] : ['PV-suff', 'PV-nec', 'PV-resultant', 'VP-suff', 'VP-nec', 'VP-resultant', 'PP-suff', 'PP-nec', 'PP-resultant', 'VV-suff', 'VV-nec', 'VV-resultant'];
+      const mudTypes = isAutoDetect ? ['PV', 'VP', 'PP', 'VV'] : ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'];
       return [...mudTypes, 'sequence', 'feedback', 'loop', 'exit', 'entry'];
     }
   };
@@ -200,22 +201,17 @@ function SimpleApp() {
 
   // Helper functions for qualified edge types
   const isQualifiedMudEdge = (edgeType: string): boolean => {
-    return edgeType.includes('-suff') || edgeType.includes('-nec') || edgeType.includes('-resultant');
+    return edgeType.includes('-suff') || edgeType.includes('-nec');
   };
 
   const getBaseEdgeType = (edgeType: string): string => {
-    return edgeType.replace('-suff', '').replace('-nec', '').replace('-resultant', '');
+    return edgeType.replace('-suff', '').replace('-nec', '');
   };
 
-  const getEdgeQualifier = (edgeType: string): 'suff' | 'nec' | 'resultant' | null => {
+  const getEdgeQualifier = (edgeType: string): 'suff' | 'nec' | null => {
     if (edgeType.includes('-suff')) return 'suff';
     if (edgeType.includes('-nec')) return 'nec';
-    if (edgeType.includes('-resultant')) return 'resultant';
     return null;
-  };
-
-  const getQualifiedEdgeTypes = (baseType: string): Edge['type'][] => {
-    return [`${baseType}-suff` as Edge['type'], `${baseType}-nec` as Edge['type'], `${baseType}-resultant` as Edge['type']];
   };
 
   const shouldShowArrowhead = (edgeType: string): boolean => {
@@ -443,6 +439,15 @@ function SimpleApp() {
     }));
   };
 
+  const toggleEdgeResultant = (edgeId: string, isResultant: boolean) => {
+    setEdges(edges.map(edge => {
+      if (edge.id === edgeId) {
+        return { ...edge, isResultant };
+      }
+      return edge;
+    }));
+  };
+
   const deleteEdge = (edgeId: string) => {
     setEdges(edges.filter(edge => edge.id !== edgeId));
     setSelectedEdges([]);
@@ -500,7 +505,7 @@ function SimpleApp() {
           const targetNode = nodes.find(n => n.id === edge.target);
           if (!sourceNode || !targetNode) return '';
           
-          const color = getEdgeColor(edge.type);
+          const color = getEdgeColor(edge.type, edge.isResultant);
           return `
             <line x1="${sourceNode.position.x}" y1="${sourceNode.position.y}" 
                   x2="${targetNode.position.x}" y2="${targetNode.position.y}" 
@@ -666,7 +671,7 @@ ${tikzCode}
     }
   };
 
-  const getEdgeColor = (type: string) => {
+  const getEdgeColor = (type: string, isResultant: boolean = false) => {
     const baseType = getBaseEdgeType(type);
     const qualifier = getEdgeQualifier(type);
     
@@ -695,7 +700,7 @@ ${tikzCode}
                      .replace('#FF9800', '#E65100') // Darker orange
                      .replace('#9C27B0', '#6A1B9A') // Darker purple
                      .replace('#F44336', '#C62828'); // Darker red
-    } else if (qualifier === 'resultant') {
+    } else if (isResultant) {
       // Lighter/grayed out for resultant relationships
       return baseColor.replace('#4CAF50', '#81C784') // Lighter green
                      .replace('#FF9800', '#FFB74D') // Lighter orange
@@ -891,7 +896,7 @@ ${tikzCode}
                     y1={edge.entryPoint.y}
                     x2={edge.entryPoint.x}
                     y2={edge.entryPoint.y}
-                    stroke={getEdgeColor(edge.type)}
+                    stroke={getEdgeColor(edge.type, edge.isResultant)}
                     strokeWidth="3"
                     markerEnd="url(#arrowhead)"
                     style={{ cursor: 'pointer', pointerEvents: 'auto' }}
@@ -902,7 +907,7 @@ ${tikzCode}
                     y={edge.entryPoint.y - 10}
                     textAnchor="middle"
                     fontSize="12"
-                    fill={getEdgeColor(edge.type)}
+                    fill={getEdgeColor(edge.type, edge.isResultant)}
                     fontWeight="bold"
                     style={{ cursor: 'pointer', userSelect: 'none', pointerEvents: 'auto' }}
                     onClick={(e) => handleEdgeClick(edge.id, e)}
@@ -921,7 +926,7 @@ ${tikzCode}
                     y1={edge.exitPoint.y}
                     x2={edge.exitPoint.x + 40}
                     y2={edge.exitPoint.y}
-                    stroke={getEdgeColor(edge.type)}
+                    stroke={getEdgeColor(edge.type, edge.isResultant)}
                     strokeWidth="3"
                     markerEnd="url(#arrowhead)"
                     style={{ cursor: 'pointer', pointerEvents: 'auto' }}
@@ -932,7 +937,7 @@ ${tikzCode}
                     y={edge.exitPoint.y - 10}
                     textAnchor="middle"
                     fontSize="12"
-                    fill={getEdgeColor(edge.type)}
+                    fill={getEdgeColor(edge.type, edge.isResultant)}
                     fontWeight="bold"
                     style={{ cursor: 'pointer', userSelect: 'none', pointerEvents: 'auto' }}
                     onClick={(e) => handleEdgeClick(edge.id, e)}
@@ -967,9 +972,9 @@ ${tikzCode}
                   y1={sourceNode.position.y}
                   x2={targetNode.position.x}
                   y2={targetNode.position.y}
-                  stroke={getEdgeColor(edge.type)}
+                  stroke={getEdgeColor(edge.type, edge.isResultant)}
                   strokeWidth={selectedEdges.includes(edge.id) ? "4" : "2"}
-                  strokeDasharray={getEdgeQualifier(edge.type) === 'resultant' ? '5,5' : 'none'}
+                  strokeDasharray={edge.isResultant ? '5,5' : 'none'}
                   markerEnd={shouldShowArrowhead(edge.type) ? "url(#arrowhead)" : 'none'}
                   style={{ pointerEvents: 'none' }}
                 />
@@ -978,7 +983,7 @@ ${tikzCode}
                   y={(sourceNode.position.y + targetNode.position.y) / 2 - 10}
                   textAnchor="middle"
                   fontSize="11"
-                  fill={getEdgeColor(edge.type)}
+                  fill={getEdgeColor(edge.type, edge.isResultant)}
                   fontWeight="bold"
                   style={{ cursor: 'pointer', userSelect: 'none', pointerEvents: 'auto' }}
                   onClick={(e) => handleEdgeClick(edge.id, e)}
@@ -1279,11 +1284,6 @@ ${tikzCode}
                   else if (edgeType === 'PP-nec') description = 'Practice → Practice (Necessary)';
                   else if (edgeType === 'VV-suff') description = 'Vocabulary → Vocabulary (Sufficient)';
                   else if (edgeType === 'VV-nec') description = 'Vocabulary → Vocabulary (Necessary)';
-                  // Resultant MUD relations
-                  else if (edgeType === 'PV-resultant') description = 'Practice → Vocabulary (Resultant)';
-                  else if (edgeType === 'VP-resultant') description = 'Vocabulary → Practice (Resultant)';
-                  else if (edgeType === 'PP-resultant') description = 'Practice → Practice (Resultant)';
-                  else if (edgeType === 'VV-resultant') description = 'Vocabulary → Vocabulary (Resultant)';
                   // TOTE relations
                   else if (edgeType === 'sequence') description = 'Sequential action';
                   else if (edgeType === 'feedback') description = 'Feedback loop';
@@ -1562,6 +1562,40 @@ ${tikzCode}
                             </div>
                           </button>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Resultant Toggle */}
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '8px',
+                        cursor: 'pointer',
+                        padding: '12px',
+                        border: '2px solid #ddd',
+                        borderRadius: '6px',
+                        background: edge.isResultant ? '#E8F5E8' : '#f9f9f9',
+                        transition: 'all 0.2s ease'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={edge.isResultant || false}
+                          onChange={(e) => toggleEdgeResultant(selectedEdgeForModification, e.target.checked)}
+                          style={{ 
+                            width: '18px', 
+                            height: '18px',
+                            cursor: 'pointer'
+                          }}
+                        />
+                        <span style={{ fontWeight: 'bold', color: '#666' }}>
+                          Resultant Relationship
+                        </span>
+                      </label>
+                      <div style={{ fontSize: '11px', color: '#888', marginTop: '6px', marginLeft: '26px' }}>
+                        {edge.isResultant ? 
+                          'This relationship is derived/indirect (dotted line)' : 
+                          'This relationship is direct (solid line)'}
                       </div>
                     </div>
 
