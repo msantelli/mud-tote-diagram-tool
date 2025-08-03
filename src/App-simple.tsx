@@ -108,6 +108,9 @@ function SimpleApp() {
   // Keyboard event handling for deletion
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't handle delete keys if user is editing a node name
+      if (editingNode) return;
+      
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
         
@@ -132,7 +135,7 @@ function SimpleApp() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedNodes, selectedEdges, nodes, edges]);
+  }, [selectedNodes, selectedEdges, nodes, edges, editingNode]);
 
   // Mode-specific helper functions
   const getAvailableTools = (mode: DiagramMode) => {
