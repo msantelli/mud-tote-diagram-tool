@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { InstallPrompt, PWAStatus } from './components/PWAComponents';
 
 // Inline all types here to avoid import issues
 interface Point {
@@ -1016,6 +1017,9 @@ ${tikzCode}
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* PWA Components */}
+      <PWAStatus />
+      <InstallPrompt />
       {/* Header */}
       <div style={{ 
         background: '#1976D2', 
