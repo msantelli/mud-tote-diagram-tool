@@ -24,7 +24,7 @@ interface Edge {
   id: string;
   source: string | null; // null for entry arrows
   target: string | null; // null for exit arrows
-  type: 'PV' | 'VP' | 'PP' | 'VV' | 'PV-suff' | 'PV-nec' | 'VP-suff' | 'VP-nec' | 'PP-suff' | 'PP-nec' | 'VV-suff' | 'VV-nec' | 'sequence' | 'feedback' | 'loop' | 'exit' | 'entry';
+  type: 'PV' | 'VP' | 'PP' | 'VV' | 'PV-suff' | 'PV-nec' | 'VP-suff' | 'VP-nec' | 'PP-suff' | 'PP-nec' | 'VV-suff' | 'VV-nec' | 'PV-resultant' | 'VP-resultant' | 'PP-resultant' | 'VV-resultant' | 'sequence' | 'feedback' | 'loop' | 'exit' | 'entry';
   // For entry/exit arrows, store position
   position?: Point;
   // For edges with null source/target, store the endpoint position
@@ -148,13 +148,13 @@ function SimpleApp() {
         return ['PV', 'VP', 'PP', 'VV'];
       } else {
         // Manual mode: return qualified types
-        return ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'];
+        return ['PV-suff', 'PV-nec', 'PV-resultant', 'VP-suff', 'VP-nec', 'VP-resultant', 'PP-suff', 'PP-nec', 'PP-resultant', 'VV-suff', 'VV-nec', 'VV-resultant'];
       }
     } else if (mode === 'TOTE') {
       return ['sequence', 'feedback', 'loop', 'exit', 'entry'];
     } else {
       // HYBRID mode
-      const mudTypes = isAutoDetect ? ['PV', 'VP', 'PP', 'VV'] : ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'];
+      const mudTypes = isAutoDetect ? ['PV', 'VP', 'PP', 'VV'] : ['PV-suff', 'PV-nec', 'PV-resultant', 'VP-suff', 'VP-nec', 'VP-resultant', 'PP-suff', 'PP-nec', 'PP-resultant', 'VV-suff', 'VV-nec', 'VV-resultant'];
       return [...mudTypes, 'sequence', 'feedback', 'loop', 'exit', 'entry'];
     }
   };
@@ -200,21 +200,22 @@ function SimpleApp() {
 
   // Helper functions for qualified edge types
   const isQualifiedMudEdge = (edgeType: string): boolean => {
-    return edgeType.includes('-suff') || edgeType.includes('-nec');
+    return edgeType.includes('-suff') || edgeType.includes('-nec') || edgeType.includes('-resultant');
   };
 
   const getBaseEdgeType = (edgeType: string): string => {
-    return edgeType.replace('-suff', '').replace('-nec', '');
+    return edgeType.replace('-suff', '').replace('-nec', '').replace('-resultant', '');
   };
 
-  const getEdgeQualifier = (edgeType: string): 'suff' | 'nec' | null => {
+  const getEdgeQualifier = (edgeType: string): 'suff' | 'nec' | 'resultant' | null => {
     if (edgeType.includes('-suff')) return 'suff';
     if (edgeType.includes('-nec')) return 'nec';
+    if (edgeType.includes('-resultant')) return 'resultant';
     return null;
   };
 
   const getQualifiedEdgeTypes = (baseType: string): Edge['type'][] => {
-    return [`${baseType}-suff` as Edge['type'], `${baseType}-nec` as Edge['type']];
+    return [`${baseType}-suff` as Edge['type'], `${baseType}-nec` as Edge['type'], `${baseType}-resultant` as Edge['type']];
   };
 
   const shouldShowArrowhead = (edgeType: string): boolean => {
@@ -694,6 +695,12 @@ ${tikzCode}
                      .replace('#FF9800', '#E65100') // Darker orange
                      .replace('#9C27B0', '#6A1B9A') // Darker purple
                      .replace('#F44336', '#C62828'); // Darker red
+    } else if (qualifier === 'resultant') {
+      // Lighter/grayed out for resultant relationships
+      return baseColor.replace('#4CAF50', '#81C784') // Lighter green
+                     .replace('#FF9800', '#FFB74D') // Lighter orange
+                     .replace('#9C27B0', '#BA68C8') // Lighter purple
+                     .replace('#F44336', '#E57373'); // Lighter red
     }
     
     return baseColor;
@@ -962,7 +969,7 @@ ${tikzCode}
                   y2={targetNode.position.y}
                   stroke={getEdgeColor(edge.type)}
                   strokeWidth={selectedEdges.includes(edge.id) ? "4" : "2"}
-                  strokeDasharray={getEdgeQualifier(edge.type) === 'nec' ? '5,5' : 'none'}
+                  strokeDasharray={getEdgeQualifier(edge.type) === 'resultant' ? '5,5' : 'none'}
                   markerEnd={shouldShowArrowhead(edge.type) ? "url(#arrowhead)" : 'none'}
                   style={{ pointerEvents: 'none' }}
                 />
@@ -1272,6 +1279,11 @@ ${tikzCode}
                   else if (edgeType === 'PP-nec') description = 'Practice → Practice (Necessary)';
                   else if (edgeType === 'VV-suff') description = 'Vocabulary → Vocabulary (Sufficient)';
                   else if (edgeType === 'VV-nec') description = 'Vocabulary → Vocabulary (Necessary)';
+                  // Resultant MUD relations
+                  else if (edgeType === 'PV-resultant') description = 'Practice → Vocabulary (Resultant)';
+                  else if (edgeType === 'VP-resultant') description = 'Vocabulary → Practice (Resultant)';
+                  else if (edgeType === 'PP-resultant') description = 'Practice → Practice (Resultant)';
+                  else if (edgeType === 'VV-resultant') description = 'Vocabulary → Vocabulary (Resultant)';
                   // TOTE relations
                   else if (edgeType === 'sequence') description = 'Sequential action';
                   else if (edgeType === 'feedback') description = 'Feedback loop';
