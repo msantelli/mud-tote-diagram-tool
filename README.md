@@ -258,9 +258,9 @@ When using this tool in academic work, please cite:
 @software{mud_tote_tool_2024,
   title={MUD & TOTE Diagram Tool: Interactive Visualization for Meaning-Use Diagrams and TOTE Cycles},
   author={Mauro Santelli},
-  institution={Universidad de Buenos Aires - Instituto de Investigaciones Filosóficas, SADAF (CONICET)},
+  institution={Universidad de Buenos Aires - Instituto de Investigaciones Filosóficas, SADAF (CONICET) - GEML},
   version={1.1.0},
-  year={2024},
+  year={2025},
   note={Web-based tool for creating and analyzing Meaning-Use Diagrams and TOTE Cycles based on Robert Brandom's philosophical framework},
   url={https://github.com/msantelli/mud-tote-diagram-tool},
   contact={mesantelli@uba.ar}
