@@ -54,6 +54,12 @@ function SimpleApp() {
   const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
   const [selectedEdgeForModification, setSelectedEdgeForModification] = useState<string | null>(null);
   const [showEdgeModificationPanel, setShowEdgeModificationPanel] = useState<boolean>(false);
+  
+  // Canvas navigation state
+  const [canvasPan, setCanvasPan] = useState<Point>({ x: 0, y: 0 });
+  const [canvasZoom, setCanvasZoom] = useState<number>(1.0);
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
 
   // Global mouse event handling for better drag behavior
   useEffect(() => {
@@ -61,26 +67,34 @@ function SimpleApp() {
       if (draggedNode && selectedTool === 'select' && canvasRef.current) {
         event.preventDefault();
         const canvasRect = canvasRef.current.getBoundingClientRect();
-        const draggedNodeObj = nodes.find(n => n.id === draggedNode);
-        if (draggedNodeObj) {
-          const dimensions = getNodeDimensions(draggedNodeObj);
-          const newX = Math.max(dimensions.radius, Math.min(canvasRect.width - dimensions.radius, event.clientX - canvasRect.left - dragOffset.x));
-          const newY = Math.max(dimensions.height / 2, Math.min(canvasRect.height - dimensions.height / 2, event.clientY - canvasRect.top - dragOffset.y));
+        const screenPos = { x: event.clientX - canvasRect.left - dragOffset.x, y: event.clientY - canvasRect.top - dragOffset.y };
+        const worldPos = screenToWorld(screenPos);
         
-          setNodes(prevNodes => prevNodes.map(node =>
-            node.id === draggedNode
-              ? { ...node, position: { x: newX, y: newY } }
-              : node
-          ));
-        }
+        setNodes(prevNodes => prevNodes.map(node =>
+          node.id === draggedNode
+            ? { ...node, position: worldPos }
+            : node
+        ));
+      } else if (isPanning && canvasRef.current) {
+        event.preventDefault();
+        const deltaX = event.clientX - panStart.x;
+        const deltaY = event.clientY - panStart.y;
+        
+        setCanvasPan(prevPan => ({
+          x: prevPan.x + deltaX,
+          y: prevPan.y + deltaY
+        }));
+        
+        setPanStart({ x: event.clientX, y: event.clientY });
       }
     };
 
     const handleGlobalMouseUp = () => {
       setDraggedNode(null);
+      setIsPanning(false);
     };
 
-    if (draggedNode) {
+    if (draggedNode || isPanning) {
       document.addEventListener('mousemove', handleGlobalMouseMove);
       document.addEventListener('mouseup', handleGlobalMouseUp);
     }
@@ -89,7 +103,7 @@ function SimpleApp() {
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [draggedNode, selectedTool, dragOffset]);
+  }, [draggedNode, selectedTool, dragOffset, isPanning, panStart, canvasPan, canvasZoom]);
 
   // Keyboard event handling for deletion
   useEffect(() => {
@@ -141,6 +155,82 @@ function SimpleApp() {
       case 'HYBRID':
         return 'Combined mode: All node types and relations available';
     }
+  };
+
+  // Coordinate transformation functions
+  const screenToWorld = (screenPoint: Point): Point => {
+    return {
+      x: (screenPoint.x - canvasPan.x) / canvasZoom,
+      y: (screenPoint.y - canvasPan.y) / canvasZoom
+    };
+  };
+
+  const worldToScreen = (worldPoint: Point): Point => {
+    return {
+      x: worldPoint.x * canvasZoom + canvasPan.x,
+      y: worldPoint.y * canvasZoom + canvasPan.y
+    };
+  };
+
+  // Calculate diagram bounds for centering and export
+  const calculateDiagramBounds = () => {
+    if (nodes.length === 0) {
+      return { minX: 0, minY: 0, maxX: 800, maxY: 600, width: 800, height: 600 };
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+    // Check all nodes
+    nodes.forEach(node => {
+      const dimensions = getNodeDimensions(node);
+      const halfWidth = dimensions.width / 2;
+      const halfHeight = dimensions.height / 2;
+      
+      minX = Math.min(minX, node.position.x - halfWidth);
+      maxX = Math.max(maxX, node.position.x + halfWidth);
+      minY = Math.min(minY, node.position.y - halfHeight);
+      maxY = Math.max(maxY, node.position.y + halfHeight);
+    });
+
+    // Add padding
+    const padding = 50;
+    minX -= padding;
+    minY -= padding;
+    maxX += padding;
+    maxY += padding;
+
+    return {
+      minX, minY, maxX, maxY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  };
+
+  const centerDiagram = () => {
+    if (!canvasRef.current) return;
+    
+    const bounds = calculateDiagramBounds();
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    
+    // Calculate the center of the canvas
+    const canvasCenterX = canvasRect.width / 2;
+    const canvasCenterY = canvasRect.height / 2;
+    
+    // Calculate the center of the diagram
+    const diagramCenterX = (bounds.minX + bounds.maxX) / 2;
+    const diagramCenterY = (bounds.minY + bounds.maxY) / 2;
+    
+    // Calculate the optimal zoom to fit the diagram
+    const scaleX = (canvasRect.width * 0.8) / bounds.width;
+    const scaleY = (canvasRect.height * 0.8) / bounds.height;
+    const optimalZoom = Math.min(scaleX, scaleY, 2.0); // Cap at 2x zoom
+    
+    // Set the pan to center the diagram
+    setCanvasZoom(optimalZoom);
+    setCanvasPan({
+      x: canvasCenterX - diagramCenterX * optimalZoom,
+      y: canvasCenterY - diagramCenterY * optimalZoom
+    });
   };
 
   const getAvailableEdgeTypes = (mode: DiagramMode, _sourceType?: string, _targetType?: string, isAutoDetect: boolean = true): Edge['type'][] => {
@@ -256,13 +346,47 @@ function SimpleApp() {
   };
 
   const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget && canvasRef.current) {
+    if (event.target === event.currentTarget && canvasRef.current && selectedTool !== 'select') {
       const rect = canvasRef.current.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      addNode(x, y);
+      const screenX = event.clientX - rect.left;
+      const screenY = event.clientY - rect.top;
+      const worldPos = screenToWorld({ x: screenX, y: screenY });
+      addNode(worldPos.x, worldPos.y);
       setSelectedNodes([]);
       setSelectedEdges([]); // Clear edge selections too
+    }
+  };
+
+  const handleCanvasMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button === 1 || (event.button === 0 && selectedTool === 'select' && event.target === event.currentTarget)) {
+      // Middle mouse button or left click with select tool on empty canvas
+      event.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: event.clientX, y: event.clientY });
+      // Clear selections when panning
+      setSelectedNodes([]);
+      setSelectedEdges([]);
+    }
+  };
+
+  const handleCanvasWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (canvasRef.current) {
+      event.preventDefault();
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      
+      // Zoom factor
+      const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+      const newZoom = Math.max(0.1, Math.min(3.0, canvasZoom * zoomFactor));
+      
+      // Calculate new pan to zoom around mouse position
+      const zoomChange = newZoom / canvasZoom;
+      const newPanX = mouseX - (mouseX - canvasPan.x) * zoomChange;
+      const newPanY = mouseY - (mouseY - canvasPan.y) * zoomChange;
+      
+      setCanvasZoom(newZoom);
+      setCanvasPan({ x: newPanX, y: newPanY });
     }
   };
 
@@ -489,9 +613,11 @@ function SimpleApp() {
   };
 
   const exportAsSVG = () => {
-    // Create SVG content
+    const bounds = calculateDiagramBounds();
+    
+    // Create SVG content with dynamic sizing
     const svgContent = `
-      <svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+      <svg width="${bounds.width}" height="${bounds.height}" viewBox="${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
             <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
@@ -852,6 +978,23 @@ ${tikzCode}
             LaTeX
           </button>
           
+          {/* Navigation button */}
+          <button
+            onClick={centerDiagram}
+            disabled={nodes.length === 0}
+            style={{
+              padding: '0.5rem 1rem',
+              border: '1px solid rgba(255,255,255,0.3)',
+              background: nodes.length === 0 ? 'rgba(255,255,255,0.05)' : 'rgba(156,39,176,0.8)',
+              color: nodes.length === 0 ? 'rgba(255,255,255,0.5)' : 'white',
+              borderRadius: '4px',
+              cursor: nodes.length === 0 ? 'not-allowed' : 'pointer',
+              fontSize: '0.9rem'
+            }}
+          >
+            🎯 Center
+          </button>
+          
           <button
             onClick={clearDiagram}
             disabled={nodes.length === 0}
@@ -874,6 +1017,8 @@ ${tikzCode}
       <div 
         ref={canvasRef}
         onClick={handleCanvasClick}
+        onMouseDown={handleCanvasMouseDown}
+        onWheel={handleCanvasWheel}
         style={{ 
           flex: 1, 
           background: '#fafafa',
@@ -886,6 +1031,7 @@ ${tikzCode}
       >
         {/* Render edges first (behind nodes) */}
         <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+          <g transform={`translate(${canvasPan.x}, ${canvasPan.y}) scale(${canvasZoom})`}>
           {edges.map(edge => {
             // Handle entry and exit arrows
             if (edge.type === 'entry' && edge.entryPoint) {
@@ -1007,6 +1153,7 @@ ${tikzCode}
               <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
             </marker>
           </defs>
+          </g>
         </svg>
 
         {/* Render nodes */}
@@ -1018,20 +1165,20 @@ ${tikzCode}
             onMouseDown={(e) => handleMouseDown(node.id, e)}
             style={{
               position: 'absolute',
-              left: node.position.x - getNodeDimensions(node).radius,
-              top: node.position.y - getNodeDimensions(node).height / 2,
-              width: getNodeDimensions(node).width,
-              height: getNodeDimensions(node).height,
+              left: worldToScreen(node.position).x - (getNodeDimensions(node).width * canvasZoom) / 2,
+              top: worldToScreen(node.position).y - (getNodeDimensions(node).height * canvasZoom) / 2,
+              width: getNodeDimensions(node).width * canvasZoom,
+              height: getNodeDimensions(node).height * canvasZoom,
               background: getNodeColors(node).background,
-              border: `3px solid ${
+              border: `${3 * canvasZoom}px solid ${
                 selectedNodes.includes(node.id) ? '#2196F3' : getNodeColors(node).border
               }`,
               borderRadius: node.type === 'vocabulary' ? '50%' : 
-                           node.type === 'test' ? '0' : '8px',
+                           node.type === 'test' ? '0' : `${8 * canvasZoom}px`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '12px',
+              fontSize: `${12 * canvasZoom}px`,
               fontWeight: 'bold',
               cursor: selectedTool === 'select' ? 'move' : 
                      selectedTool === 'edge' ? 'pointer' : 'default',
