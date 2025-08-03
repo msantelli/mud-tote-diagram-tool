@@ -7,9 +7,10 @@ interface Point {
 }
 
 interface NodeStyle {
-  size: 'small' | 'medium' | 'large';
+  size?: 'small' | 'medium' | 'large';
   backgroundColor?: string;
   borderColor?: string;
+  textColor?: string;
 }
 
 interface Node {
@@ -323,9 +324,14 @@ function SimpleApp() {
 
     // Find all edges between the same pair of nodes (limit to 3 for performance)
     const parallelEdges = allEdges.filter(e => 
-      (e.source === edge.source && e.target === edge.target) ||
-      (e.source === edge.target && e.target === edge.source)
-    ).slice(0, 3); // Limit to maximum 3 parallel edges
+      e.id !== undefined && e.source && e.target && // Only consider valid edges with both source and target
+      ((e.source === edge.source && e.target === edge.target) ||
+       (e.source === edge.target && e.target === edge.source))
+    );
+    
+    // Sort by ID for consistent ordering, then limit to 3
+    parallelEdges.sort((a, b) => a.id.localeCompare(b.id));
+    const limitedParallelEdges = parallelEdges.slice(0, 3);
 
     // Calculate base line vector from center to center
     const dx = targetNode.position.x - sourceNode.position.x;
@@ -340,28 +346,63 @@ function SimpleApp() {
 
     // Calculate perpendicular offset for parallel edges
     let perpOffset = 0;
-    if (parallelEdges.length > 1) {
+    if (limitedParallelEdges.length > 1) {
+      const edgeIndex = limitedParallelEdges.findIndex(e => e.id === edge.id);
       
-      const edgeIndex = parallelEdges.findIndex(e => e.id === edge.id);
-      const totalEdges = Math.min(parallelEdges.length, 3); // Max 3 edges
+      // Check if edge was found in parallel edges (it should be)
+      if (edgeIndex === -1) {
+        console.warn(`Edge ${edge.id} not found in its own parallel edges list!`);
+        return { x1: sourceNode.position.x, y1: sourceNode.position.y, x2: targetNode.position.x, y2: targetNode.position.y };
+      }
       
-      // Spacing based on number of edges: 2 edges = ±15px, 3 edges = -20, 0, +20px
-      const spacing = totalEdges === 2 ? 15 : 20;
+      const totalEdges = limitedParallelEdges.length; // Max 3 edges due to slice
+      
+      // Spacing based on number of edges: 2 edges = ±25px, 3 edges = -30, 0, +30px
+      const spacing = totalEdges === 2 ? 25 : 30;
       perpOffset = (edgeIndex - (totalEdges - 1) / 2) * spacing;
+      
+      // Debug log for parallel edges
+      console.log(`Edge ${edge.id} (${edge.source}->${edge.target}): ${limitedParallelEdges.length} parallel edges, index ${edgeIndex}, offset ${perpOffset}px, spacing ${spacing}px`);
+      console.log('Parallel edge IDs:', limitedParallelEdges.map(e => `${e.id} (${e.source}->${e.target})`));
     }
 
     // Get node dimensions for border calculation
     const sourceDim = getNodeDimensions(sourceNode);
     const targetDim = getNodeDimensions(targetNode);
 
-    // Calculate radius for edge intersection (account for node shape)
-    const sourceRadius = sourceNode.type === 'vocabulary' ? Math.max(sourceDim.radius, sourceDim.height/2) :
-                        sourceNode.type === 'test' ? sourceDim.radius * 1.2 : // Diamond needs extra space
-                        Math.max(sourceDim.width/2, sourceDim.height/2);
-    
-    const targetRadius = targetNode.type === 'vocabulary' ? Math.max(targetDim.radius, targetDim.height/2) :
-                        targetNode.type === 'test' ? targetDim.radius * 1.2 :
-                        Math.max(targetDim.width/2, targetDim.height/2);
+    // Calculate proper intersection distance based on node shape and direction
+    const calculateIntersectionDistance = (node: Node, dim: { width: number; height: number; radius: number }, dirX: number, dirY: number) => {
+      if (node.type === 'vocabulary') {
+        // Ellipse intersection: use correct parametric calculation
+        const rx = dim.width / 2; // Half width
+        const ry = dim.height / 2; // Half height
+        
+        // For ellipse intersection: t = 1 / sqrt((cos²θ/a²) + (sin²θ/b²))
+        // where θ is angle from center to point, a=rx, b=ry
+        const cosTheta = Math.abs(dirX);
+        const sinTheta = Math.abs(dirY);
+        return 1 / Math.sqrt((cosTheta * cosTheta) / (rx * rx) + (sinTheta * sinTheta) / (ry * ry));
+      } else if (node.type === 'test') {
+        // Diamond shape needs special handling
+        return dim.radius * 1.2;
+      } else {
+        // Rectangle intersection (practice, operate) - use same logic as PP (working correctly)
+        const halfWidth = dim.width / 2;
+        const halfHeight = dim.height / 2;
+        
+        // Calculate intersection with rectangle border using consistent method
+        if (Math.abs(dirX) > Math.abs(dirY)) {
+          // Hit left/right edge
+          return halfWidth / Math.abs(dirX);
+        } else {
+          // Hit top/bottom edge  
+          return halfHeight / Math.abs(dirY);
+        }
+      }
+    };
+
+    const sourceRadius = calculateIntersectionDistance(sourceNode, sourceDim, dirX, dirY);
+    const targetRadius = calculateIntersectionDistance(targetNode, targetDim, dirX, dirY);
 
     // Calculate offset centers for parallel edges
     const sourceCenterX = sourceNode.position.x + (perpOffset * -dy / length);
@@ -369,11 +410,11 @@ function SimpleApp() {
     const targetCenterX = targetNode.position.x + (perpOffset * -dy / length);
     const targetCenterY = targetNode.position.y + (perpOffset * dx / length);
 
-    // Calculate edge start/end points at node borders (not centers)
-    const x1 = sourceCenterX + dirX * (sourceRadius + 5); // +5px padding from border
-    const y1 = sourceCenterY + dirY * (sourceRadius + 5);
-    const x2 = targetCenterX - dirX * (targetRadius + 5); // -5px padding from border  
-    const y2 = targetCenterY - dirY * (targetRadius + 5);
+    // Calculate edge start/end points at node borders (arrows touch nodes)
+    const x1 = sourceCenterX + dirX * sourceRadius; // Start at border
+    const y1 = sourceCenterY + dirY * sourceRadius;
+    const x2 = targetCenterX - dirX * targetRadius; // End at border (arrow touches)
+    const y2 = targetCenterY - dirY * targetRadius;
 
     return { x1, y1, x2, y2 };
   };
@@ -732,7 +773,7 @@ function SimpleApp() {
               <ellipse cx="${node.position.x}" cy="${node.position.y}" 
                        rx="${dimensions.radius}" ry="${dimensions.height/2}" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
               <text x="${node.position.x}" y="${node.position.y + 5}" 
-                    text-anchor="middle" font-size="12" font-weight="bold">${node.label}</text>
+                    text-anchor="middle" font-size="12" font-weight="bold" fill="${node.style?.textColor || '#000000'}">${node.label}</text>
             `;
           } else if (node.type === 'test') {
             const halfSize = dimensions.width / 2;
@@ -741,14 +782,14 @@ function SimpleApp() {
                 <rect x="-${halfSize}" y="-${halfSize}" width="${dimensions.width}" height="${dimensions.height}" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
               </g>
               <text x="${node.position.x}" y="${node.position.y + 5}" 
-                    text-anchor="middle" font-size="12" font-weight="bold">${node.label}</text>
+                    text-anchor="middle" font-size="12" font-weight="bold" fill="${node.style?.textColor || '#000000'}">${node.label}</text>
             `;
           } else {
             return `
               <rect x="${node.position.x - dimensions.radius}" y="${node.position.y - dimensions.height/2}" 
                     width="${dimensions.width}" height="${dimensions.height}" rx="8" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
               <text x="${node.position.x}" y="${node.position.y + 5}" 
-                    text-anchor="middle" font-size="12" font-weight="bold">${node.label}</text>
+                    text-anchor="middle" font-size="12" font-weight="bold" fill="${node.style?.textColor || '#000000'}">${node.label}</text>
             `;
           }
         }).join('')}
@@ -1270,7 +1311,8 @@ ${tikzCode}
               transform: node.type === 'test' ? 'rotate(-45deg)' : 'none',
               textAlign: 'center',
               wordBreak: 'break-word',
-              padding: '2px'
+              padding: '2px',
+              color: node.style?.textColor || '#000000'
             }}>
               {node.label}
             </span>
@@ -1492,9 +1534,6 @@ ${tikzCode}
               
               <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
                 {getAvailableEdgeTypes(diagramMode, undefined, undefined, autoDetectEdges).map(edgeType => {
-                  const sourceNode = nodes.find(n => n.id === pendingEdge.source);
-                  const targetNode = nodes.find(n => n.id === pendingEdge.target);
-                  
                   let description = '';
                   // Simple MUD relations
                   if (edgeType === 'PV') description = 'Practice → Vocabulary';
@@ -1646,7 +1685,7 @@ ${tikzCode}
                     </div>
 
                     {/* Border Color */}
-                    <div style={{ marginBottom: '24px' }}>
+                    <div style={{ marginBottom: '20px' }}>
                       <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#666' }}>
                         Border Color:
                       </label>
@@ -1654,6 +1693,25 @@ ${tikzCode}
                         type="color"
                         value={getNodeColors(node).border}
                         onChange={(e) => updateNodeStyle(selectedNodeForCustomization, { borderColor: e.target.value })}
+                        style={{
+                          width: '100%',
+                          height: '40px',
+                          border: '2px solid #ddd',
+                          borderRadius: '6px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                    </div>
+
+                    {/* Text Color */}
+                    <div style={{ marginBottom: '24px' }}>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#666' }}>
+                        Text Color:
+                      </label>
+                      <input
+                        type="color"
+                        value={node.style?.textColor || '#000000'}
+                        onChange={(e) => updateNodeStyle(selectedNodeForCustomization, { textColor: e.target.value })}
                         style={{
                           width: '100%',
                           height: '40px',
