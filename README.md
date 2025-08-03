@@ -2,7 +2,7 @@
 
 An advanced web-based tool for creating and analyzing **Meaning-Use Diagrams (MUDs)** and **TOTE Cycles** based on Robert Brandom's philosophical framework. This tool provides researchers, philosophers, and students with a sophisticated platform for visualizing complex semantic relationships and goal-directed behavioral structures.
 
-## 🎯 Overview
+## Overview
 
 This interactive diagramming tool implements Robert Brandom's theoretical framework for analyzing the relationships between vocabularies and practices, supporting both:
 
@@ -10,9 +10,9 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 - **TOTE Cycles**: Test-Operate-Test-Exit behavioral loops for modeling goal-directed actions
 - **Hybrid Diagrams**: Combined representations integrating both frameworks
 
-## ✨ Key Features
+## Key Features
 
-### 🧠 **Advanced MUD Relations**
+### Advanced MUD Relations
 - **Qualified Edge Types**: Support for sufficiency and necessity qualifiers
   - `PV-suff/PV-nec`: Practice → Vocabulary (Sufficient/Necessary)
   - `VP-suff/VP-nec`: Vocabulary → Practice (Sufficient/Necessary)  
@@ -23,14 +23,14 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 - **Resultant Relationships**: Toggle any edge as resultant/derived (dotted lines)
 - **Directional Arrows**: Clear visual indication of relationship direction
 
-### 🔄 **Complete TOTE Support**
+### Complete TOTE Support
 - **Test Nodes**: Diamond-shaped decision/condition points
 - **Operate Nodes**: Rectangular action/operation elements
 - **Entry Arrows**: Parentless arrows indicating cycle initiation points
 - **Exit Arrows**: Childless arrows showing successful completion paths
 - **Flow Relations**: Sequence, feedback, loop, and exit connections
 
-### 🎨 **Visual Customization**
+### Visual Customization
 - **Node Styling**: Size variants (small/medium/large), custom colors, and text color customization
 - **Text Appearance**: Default black text with full color picker for customization
 - **Arrow Precision**: Accurate arrowhead positioning for all node types and edge combinations
@@ -40,19 +40,19 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
   - Resultant relations: Dotted lines with lighter colors
   - Node type differentiation: Vocabulary (ovals), Practice (rectangles), Test (diamonds), Operate (rectangles)
 
-### 📊 **Academic Export Options**
+### Academic Export Options
 - **JSON**: Complete diagram data with metadata
 - **SVG**: Vector graphics for presentations and publications
 - **LaTeX/TikZ**: Publication-ready academic diagrams
 - **Custom Styling**: All exports respect visual customizations
 
-### ⚙️ **Interactive Editing**
+### Interactive Editing
 - **Click-to-Select**: Nodes and edges with visual feedback
 - **Real-time Modification**: Change edge types, node properties, and styling
 - **Keyboard Shortcuts**: Delete/Backspace for quick removal
 - **Multi-modal Interface**: Tools adapt to current diagram mode
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 ```bash
@@ -78,7 +78,7 @@ npm run build
 4. **Customize**: Select nodes/edges and use customization panels
 5. **Export**: Save diagrams in JSON, SVG, or LaTeX formats
 
-## 📚 Academic Context
+## Academic Context
 
 ### Philosophical Foundation
 
@@ -98,7 +98,7 @@ Based on Miller, Galanter, and Pribram's **Plans and the Structure of Behavior**
 - **Exit Conditions**: Successful goal achievement indicators
 - **Hierarchical Structure**: Nested cycles for complex behaviors
 
-## 🎮 Usage Guide
+## Usage Guide
 
 ### Creating MUD Diagrams
 
@@ -149,7 +149,7 @@ Based on Miller, Galanter, and Pribram's **Plans and the Structure of Behavior**
 - **Escape**: Cancel current operation
 - **Double-click**: Edit node labels inline
 
-## 🔧 Technical Specifications
+## Technical Specifications
 
 ### Architecture
 - **Frontend**: React 18 + TypeScript
@@ -207,7 +207,7 @@ Modern browsers with ES2020+ support required.
 - **Custom Colors**: Maintains visual customizations in export
 - **Scalable**: Vector-based output for any document size
 
-## 🤝 Contributing
+## Contributing
 
 ### Academic Guidelines
 This tool maintains strict adherence to philosophical accuracy. When contributing:
@@ -230,7 +230,7 @@ npm run lint            # ESLint checking
 npx tsc --noEmit       # Type checking
 ```
 
-## 📖 Research Applications
+## Research Applications
 
 ### Philosophical Analysis
 - **Semantic Theory**: Visualizing meaning-use relationships
@@ -250,17 +250,24 @@ npx tsc --noEmit       # Type checking
 - **Collaborative Analysis**: Shared diagram development and discussion
 - **Publication Support**: Export formats for academic papers
 
-## 📄 Citation
+## Citation
 
 When using this tool in academic work, please cite:
 
-```
-MUD & TOTE Diagram Tool (2024). Interactive visualization platform for 
-Meaning-Use Diagrams and TOTE Cycles based on Robert Brandom's philosophical 
-framework. https://github.com/msantelli/mud-tote-diagram-tool
+```bibtex
+@software{mud_tote_tool_2024,
+  title={MUD & TOTE Diagram Tool: Interactive Visualization for Meaning-Use Diagrams and TOTE Cycles},
+  author={Mauro Santelli},
+  institution={Universidad de Buenos Aires - Instituto de Investigaciones Filosóficas, SADAF (CONICET)},
+  version={1.1.0},
+  year={2024},
+  note={Web-based tool for creating and analyzing Meaning-Use Diagrams and TOTE Cycles based on Robert Brandom's philosophical framework},
+  url={https://github.com/msantelli/mud-tote-diagram-tool},
+  contact={mesantelli@uba.ar}
+}
 ```
 
-## 📞 Support
+## Support
 
 For academic inquiries, technical support, or theoretical questions:
 
@@ -268,7 +275,7 @@ For academic inquiries, technical support, or theoretical questions:
 - **Academic Contact**: [Contact information for academic collaboration]
 - **Documentation**: Comprehensive guides in `/docs` directory
 
-## 🏛 Acknowledgments
+## Acknowledgments
 
 This tool implements theoretical frameworks developed by:
 
