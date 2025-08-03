@@ -20,6 +20,7 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
   - `VV-suff/VV-nec`: Vocabulary → Vocabulary (Sufficient/Necessary)
 - **Auto-Detection Mode**: Intelligent edge type inference based on node connections
 - **Manual Mode**: Precise control over semantic relationship specification
+- **Resultant Relationships**: Toggle any edge as resultant/derived (dotted lines)
 - **Directional Arrows**: Clear visual indication of relationship direction
 
 ### 🔄 **Complete TOTE Support**
@@ -33,7 +34,8 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 - **Node Styling**: Size variants (small/medium/large) and custom colors
 - **Smart Visual Coding**: 
   - Sufficient relations: Solid lines with standard colors
-  - Necessary relations: Dashed lines with darker colors
+  - Necessary relations: Solid lines with darker colors
+  - Resultant relations: Dotted lines with lighter colors
   - Node type differentiation: Vocabulary (ovals), Practice (rectangles), Test (diamonds), Operate (rectangles)
 
 ### 📊 **Academic Export Options**
@@ -133,6 +135,9 @@ Based on Miller, Galanter, and Pribram's **Plans and the Structure of Behavior**
 - **Select Edge**: Click edge line or label
 - **Open Panel**: Click "⚙️ Modify Edge"
 - **Change Type**: Choose from available qualified relations
+- **Resultant Toggle**: Toggle any relationship as resultant (dotted lines)
+  - Direct relationships: Solid lines
+  - Resultant/derived relationships: Dotted lines with lighter colors
 - **Delete**: Remove unwanted connections
 
 ### Keyboard Shortcuts
@@ -180,7 +185,8 @@ Modern browsers with ES2020+ support required.
       "id": "edge-id",
       "source": "source-node-id",
       "target": "target-node-id",
-      "type": "PV-suff|VP-nec|sequence|feedback|..."
+      "type": "PV-suff|VP-nec|sequence|feedback|...",
+      "isResultant": false
     }
   ],
   "metadata": {
