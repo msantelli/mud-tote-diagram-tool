@@ -52,9 +52,49 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 - **Keyboard Shortcuts**: Delete/Backspace for quick removal
 - **Multi-modal Interface**: Tools adapt to current diagram mode
 
-## Quick Start
+## Installation
 
-### Installation
+### Desktop Application (Recommended)
+
+Download the appropriate executable for your operating system:
+
+**Windows:**
+- `MUD & TOTE Diagram Tool Setup 1.0.0.exe` - Full installer with Start Menu integration
+- `MUD & TOTE Diagram Tool 1.0.0.exe` - Portable executable, no installation required
+
+**Linux:**
+- `MUD & TOTE Diagram Tool-1.0.0.AppImage` - Universal Linux application
+- `mud-tote-tool_1.0.0_amd64.deb` - Debian/Ubuntu package
+
+#### Usage Instructions
+
+**Windows:**
+1. Download the desired .exe file
+2. Run the installer or double-click the portable version
+3. Launch "MUD & TOTE Diagram Tool" from Start Menu or desktop
+
+**Linux (AppImage):**
+```bash
+# Make executable
+chmod +x "MUD & TOTE Diagram Tool-1.0.0.AppImage"
+
+# Run application
+./"MUD & TOTE Diagram Tool-1.0.0.AppImage"
+```
+
+**Linux (Debian/Ubuntu):**
+```bash
+# Install package
+sudo dpkg -i mud-tote-tool_1.0.0_amd64.deb
+
+# Run from applications menu or terminal
+mud-tote-tool
+```
+
+### Development Setup
+
+For developers who want to modify or extend the tool:
+
 ```bash
 # Clone the repository
 git clone https://github.com/msantelli/mud-tote-diagram-tool.git
