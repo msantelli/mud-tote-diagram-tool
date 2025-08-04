@@ -57,10 +57,7 @@ function createWindow() {
     console.error('Page failed to load:', errorCode, errorDescription, validatedURL);
   });
 
-  // Debug: Enable DevTools in production for troubleshooting (remove later)
-  if (!isDev) {
-    mainWindow.webContents.openDevTools();
-  }
+  // DevTools disabled in production for clean user experience
 
   // Handle window closed
   mainWindow.on('closed', () => {
