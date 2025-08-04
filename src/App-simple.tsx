@@ -128,6 +128,84 @@ function SimpleApp() {
     }
   }, []);
 
+  // Expose functions to global window for Electron menu integration
+  useEffect(() => {
+    (window as any).exportDiagram = () => ({
+      nodes,
+      edges,
+      metadata: {
+        created: new Date().toISOString(),
+        version: '1.0',
+        type: 'MUD-TOTE'
+      }
+    });
+
+    (window as any).importDiagram = (diagram: any) => {
+      try {
+        if (diagram.nodes && diagram.edges) {
+          if (confirm('This will replace your current diagram. Continue?')) {
+            setNodes(diagram.nodes);
+            setEdges(diagram.edges);
+            setSelectedNodes([]);
+            setSelectedEdges([]);
+            
+            // Center will be handled by the centerDiagram function exposed separately
+            setTimeout(() => {
+              const centerFn = (window as any).centerDiagram;
+              if (centerFn) centerFn();
+            }, 100);
+          }
+        }
+      } catch (error) {
+        console.error('Import error:', error);
+      }
+    };
+
+    (window as any).clearDiagram = () => {
+      if (confirm('Clear all nodes and edges?')) {
+        setNodes([]);
+        setEdges([]);
+        setSelectedNodes([]);
+        setSelectedEdges([]);
+      }
+    };
+
+    (window as any).undo = undo;
+    (window as any).redo = redo;
+    (window as any).centerDiagram = centerDiagram;
+
+    (window as any).zoomIn = () => {
+      setCanvasZoom(prev => Math.min(3.0, prev * 1.2));
+    };
+
+    (window as any).zoomOut = () => {
+      setCanvasZoom(prev => Math.max(0.1, prev / 1.2));
+    };
+
+    (window as any).resetZoom = () => {
+      setCanvasZoom(1.0);
+      setCanvasPan({ x: 0, y: 0 });
+    };
+
+    (window as any).selectAll = () => {
+      setSelectedNodes(nodes.map(n => n.id));
+    };
+
+    // Cleanup on unmount
+    return () => {
+      delete (window as any).exportDiagram;
+      delete (window as any).importDiagram;
+      delete (window as any).clearDiagram;
+      delete (window as any).undo;
+      delete (window as any).redo;
+      delete (window as any).centerDiagram;
+      delete (window as any).zoomIn;
+      delete (window as any).zoomOut;
+      delete (window as any).resetZoom;
+      delete (window as any).selectAll;
+    };
+  }, [nodes, edges, undo, redo]);
+
   // Global mouse event handling for better drag behavior
   useEffect(() => {
     const handleGlobalMouseMove = (event: MouseEvent) => {
@@ -912,9 +990,26 @@ function SimpleApp() {
             setSelectedNodes([]);
             setSelectedEdges([]);
             
-            // Center the imported diagram
+            // Center the imported diagram after state updates
             setTimeout(() => {
-              centerDiagram();
+              // We need to call centerDiagram after it's defined, so we'll use a callback approach
+              const bounds = calculateDiagramBounds();
+              if (canvasRef.current) {
+                const canvasRect = canvasRef.current.getBoundingClientRect();
+                const canvasCenterX = canvasRect.width / 2;
+                const canvasCenterY = canvasRect.height / 2;
+                const diagramCenterX = (bounds.minX + bounds.maxX) / 2;
+                const diagramCenterY = (bounds.minY + bounds.maxY) / 2;
+                const scaleX = (canvasRect.width * 0.8) / bounds.width;
+                const scaleY = (canvasRect.height * 0.8) / bounds.height;
+                const optimalZoom = Math.min(scaleX, scaleY, 2.0);
+                
+                setCanvasZoom(optimalZoom);
+                setCanvasPan({
+                  x: canvasCenterX - diagramCenterX * optimalZoom,
+                  y: canvasCenterY - diagramCenterY * optimalZoom
+                });
+              }
             }, 100);
             
             alert('Diagram imported successfully!');
