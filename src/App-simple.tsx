@@ -45,6 +45,7 @@ function SimpleApp() {
   const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
+  const [hasSavedDragHistory, setHasSavedDragHistory] = useState<boolean>(false);
   const [editingNode, setEditingNode] = useState<string | null>(null);
   const [editText, setEditText] = useState<string>('');
   const [diagramMode, setDiagramMode] = useState<DiagramMode>('HYBRID');
@@ -63,11 +64,82 @@ function SimpleApp() {
   const [isPanning, setIsPanning] = useState<boolean>(false);
   const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
 
+  // Undo/Redo state
+  interface HistoryState {
+    nodes: Node[];
+    edges: Edge[];
+  }
+  const [history, setHistory] = useState<HistoryState[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [maxHistorySize] = useState<number>(50);
+
+  // History management functions
+  const saveToHistory = () => {
+    const currentState: HistoryState = {
+      nodes: JSON.parse(JSON.stringify(nodes)), // Deep copy
+      edges: JSON.parse(JSON.stringify(edges))  // Deep copy
+    };
+    
+    // Remove any future history if we're not at the end
+    const newHistory = history.slice(0, historyIndex + 1);
+    
+    // Add new state
+    newHistory.push(currentState);
+    
+    // Limit history size
+    if (newHistory.length > maxHistorySize) {
+      newHistory.shift();
+    } else {
+      setHistoryIndex(prev => prev + 1);
+    }
+    
+    setHistory(newHistory);
+  };
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      const prevState = history[historyIndex - 1];
+      setNodes(prevState.nodes);
+      setEdges(prevState.edges);
+      setHistoryIndex(prev => prev - 1);
+      setSelectedNodes([]);
+      setSelectedEdges([]);
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      setNodes(nextState.nodes);
+      setEdges(nextState.edges);
+      setHistoryIndex(prev => prev + 1);
+      setSelectedNodes([]);
+      setSelectedEdges([]);
+    }
+  };
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+
+  // Initialize history with empty state
+  useEffect(() => {
+    if (history.length === 0) {
+      saveToHistory();
+    }
+  }, []);
+
   // Global mouse event handling for better drag behavior
   useEffect(() => {
     const handleGlobalMouseMove = (event: MouseEvent) => {
       if (draggedNode && selectedTool === 'select' && canvasRef.current) {
         event.preventDefault();
+        
+        // Save to history only once per drag operation
+        if (!hasSavedDragHistory) {
+          saveToHistory();
+          setHasSavedDragHistory(true);
+        }
+        
         const canvasRect = canvasRef.current.getBoundingClientRect();
         const screenPos = { x: event.clientX - canvasRect.left, y: event.clientY - canvasRect.top };
         const worldPos = screenToWorld(screenPos);
@@ -94,6 +166,7 @@ function SimpleApp() {
     const handleGlobalMouseUp = () => {
       setDraggedNode(null);
       setIsPanning(false);
+      setHasSavedDragHistory(false); // Reset drag history flag
     };
 
     if (draggedNode || isPanning) {
@@ -105,16 +178,34 @@ function SimpleApp() {
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [draggedNode, selectedTool, dragOffset, isPanning, panStart, canvasPan, canvasZoom]);
+  }, [draggedNode, selectedTool, dragOffset, isPanning, panStart, canvasPan, canvasZoom, hasSavedDragHistory, saveToHistory]);
 
-  // Keyboard event handling for deletion
+  // Keyboard event handling for deletion and undo/redo
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Don't handle delete keys if user is editing a node name
+      // Don't handle keys if user is editing a node name
       if (editingNode) return;
+      
+      // Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (Mac)
+      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+        return;
+      }
+      
+      // Redo: Ctrl+Y (Windows/Linux) or Cmd+Shift+Z (Mac) or Ctrl+Shift+Z
+      if (((event.ctrlKey || event.metaKey) && event.key === 'y') || 
+          ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'z')) {
+        event.preventDefault();
+        redo();
+        return;
+      }
       
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
+        
+        // Save state before deletion
+        saveToHistory();
         
         // Delete selected nodes
         if (selectedNodes.length > 0) {
@@ -137,7 +228,7 @@ function SimpleApp() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedNodes, selectedEdges, nodes, edges, editingNode]);
+  }, [selectedNodes, selectedEdges, nodes, edges, editingNode, undo, redo, saveToHistory]);
 
   // Mode-specific helper functions
   const getAvailableTools = (mode: DiagramMode) => {
@@ -241,17 +332,17 @@ function SimpleApp() {
   const getAvailableEdgeTypes = (mode: DiagramMode, _sourceType?: string, _targetType?: string, isAutoDetect: boolean = true): Edge['type'][] => {
     if (mode === 'MUD') {
       if (isAutoDetect) {
-        return ['PV', 'VP', 'PP', 'VV'];
+        return ['PV', 'VP', 'PP', 'VV'] as Edge['type'][];
       } else {
         // Manual mode: return qualified types
-        return ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'];
+        return ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'] as Edge['type'][];
       }
     } else if (mode === 'TOTE') {
-      return ['sequence', 'feedback', 'loop', 'exit', 'entry'];
+      return ['sequence', 'feedback', 'loop', 'exit', 'entry'] as Edge['type'][];
     } else {
       // HYBRID mode
-      const mudTypes = isAutoDetect ? ['PV', 'VP', 'PP', 'VV'] : ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'];
-      return [...mudTypes, 'sequence', 'feedback', 'loop', 'exit', 'entry'];
+      const mudTypes = isAutoDetect ? ['PV', 'VP', 'PP', 'VV'] as Edge['type'][] : ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'] as Edge['type'][];
+      return [...mudTypes, 'sequence', 'feedback', 'loop', 'exit', 'entry'] as Edge['type'][];
     }
   };
 
@@ -295,10 +386,6 @@ function SimpleApp() {
   };
 
   // Helper functions for qualified edge types
-  const isQualifiedMudEdge = (edgeType: string): boolean => {
-    return edgeType.includes('-suff') || edgeType.includes('-nec');
-  };
-
   const getBaseEdgeType = (edgeType: string): string => {
     return edgeType.replace('-suff', '').replace('-nec', '');
   };
@@ -474,6 +561,9 @@ function SimpleApp() {
   const addNode = (x: number, y: number) => {
     if (selectedTool === 'select' || selectedTool === 'edge') return;
     
+    // Save state before adding
+    saveToHistory();
+    
     // Handle entry and exit arrows
     if (selectedTool === 'entry' || selectedTool === 'exit') {
       const newEdge: Edge = {
@@ -556,6 +646,9 @@ function SimpleApp() {
         
         // Use auto-detection if enabled, otherwise show selector
         if (autoDetectEdges && diagramMode === 'MUD') {
+          // Save state before creating edge
+          saveToHistory();
+          
           // Auto-detect MUD edge type
           let edgeType: Edge['type'];
           if (sourceNode.type === 'practice' && targetNode.type === 'vocabulary') {
@@ -621,6 +714,9 @@ function SimpleApp() {
 
   const handleEditSubmit = () => {
     if (editingNode && editText.trim()) {
+      // Save state before editing
+      saveToHistory();
+      
       setNodes(nodes.map(node =>
         node.id === editingNode
           ? { ...node, label: editText.trim() }
@@ -638,6 +734,9 @@ function SimpleApp() {
 
   const createEdgeWithType = (edgeType: Edge['type']) => {
     if (pendingEdge) {
+      // Save state before creating edge
+      saveToHistory();
+      
       const newEdge: Edge = {
         id: Date.now().toString(),
         source: pendingEdge.source,
@@ -668,6 +767,9 @@ function SimpleApp() {
   };
 
   const updateNodeStyle = (nodeId: string, styleUpdate: Partial<NodeStyle>) => {
+    // Save state before styling
+    saveToHistory();
+    
     setNodes(nodes.map(node => {
       if (node.id === nodeId) {
         return {
@@ -680,6 +782,9 @@ function SimpleApp() {
   };
 
   const resetNodeStyle = (nodeId: string) => {
+    // Save state before resetting style
+    saveToHistory();
+    
     setNodes(nodes.map(node => {
       if (node.id === nodeId) {
         const { style, ...nodeWithoutStyle } = node;
@@ -711,6 +816,9 @@ function SimpleApp() {
   };
 
   const updateEdgeType = (edgeId: string, newType: Edge['type']) => {
+    // Save state before updating edge type
+    saveToHistory();
+    
     setEdges(edges.map(edge => {
       if (edge.id === edgeId) {
         return { ...edge, type: newType };
@@ -720,6 +828,9 @@ function SimpleApp() {
   };
 
   const toggleEdgeResultant = (edgeId: string, isResultant: boolean) => {
+    // Save state before toggling resultant
+    saveToHistory();
+    
     setEdges(edges.map(edge => {
       if (edge.id === edgeId) {
         return { ...edge, isResultant };
@@ -748,7 +859,76 @@ function SimpleApp() {
     closeCustomizationPanel();
   };
 
-  // Export functions
+  // Import/Export functions
+  const importFromJSON = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const jsonStr = e.target?.result as string;
+          const diagram = JSON.parse(jsonStr);
+          
+          // Validate the diagram structure
+          if (!diagram.nodes || !Array.isArray(diagram.nodes)) {
+            throw new Error('Invalid diagram format: missing or invalid nodes array');
+          }
+          if (!diagram.edges || !Array.isArray(diagram.edges)) {
+            throw new Error('Invalid diagram format: missing or invalid edges array');
+          }
+          
+          // Validate node structure
+          for (const node of diagram.nodes) {
+            if (!node.id || !node.type || !node.position || !node.label) {
+              throw new Error('Invalid node structure in diagram');
+            }
+            if (!['vocabulary', 'practice', 'test', 'operate'].includes(node.type)) {
+              throw new Error(`Invalid node type: ${node.type}`);
+            }
+          }
+          
+          // Validate edge structure
+          for (const edge of diagram.edges) {
+            if (!edge.id || !edge.type) {
+              throw new Error('Invalid edge structure in diagram');
+            }
+            // Entry/exit edges can have null source/target
+            if (edge.type !== 'entry' && edge.type !== 'exit') {
+              if (!edge.source || !edge.target) {
+                throw new Error('Invalid edge: missing source or target');
+              }
+            }
+          }
+          
+          // Clear current diagram and load new one
+          if (confirm('This will replace your current diagram. Continue?')) {
+            setNodes(diagram.nodes);
+            setEdges(diagram.edges);
+            setSelectedNodes([]);
+            setSelectedEdges([]);
+            
+            // Center the imported diagram
+            setTimeout(() => {
+              centerDiagram();
+            }, 100);
+            
+            alert('Diagram imported successfully!');
+          }
+        } catch (error) {
+          console.error('Import error:', error);
+          alert(`Failed to import diagram: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
   const exportAsJSON = () => {
     const diagram = {
       nodes,
@@ -1109,6 +1289,57 @@ ${tikzCode}
           
           {/* Separator */}
           <div style={{ height: '30px', width: '1px', background: 'rgba(255,255,255,0.3)', margin: '0 0.5rem' }} />
+          
+          {/* Undo/Redo buttons */}
+          <button
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+            style={{
+              padding: '0.5rem 1rem',
+              border: '1px solid rgba(255,255,255,0.3)',
+              background: !canUndo ? 'rgba(255,255,255,0.05)' : 'rgba(96,125,139,0.8)',
+              color: !canUndo ? 'rgba(255,255,255,0.3)' : 'white',
+              borderRadius: '4px',
+              cursor: !canUndo ? 'not-allowed' : 'pointer',
+              fontSize: '0.9rem'
+            }}
+          >
+            ↶ Undo
+          </button>
+          
+          <button
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Y)"
+            style={{
+              padding: '0.5rem 1rem',
+              border: '1px solid rgba(255,255,255,0.3)',
+              background: !canRedo ? 'rgba(255,255,255,0.05)' : 'rgba(96,125,139,0.8)',
+              color: !canRedo ? 'rgba(255,255,255,0.3)' : 'white',
+              borderRadius: '4px',
+              cursor: !canRedo ? 'not-allowed' : 'pointer',
+              fontSize: '0.9rem'
+            }}
+          >
+            ↷ Redo
+          </button>
+          
+          {/* Import button */}
+          <button
+            onClick={importFromJSON}
+            style={{
+              padding: '0.5rem 1rem',
+              border: '1px solid rgba(255,255,255,0.3)',
+              background: 'rgba(156,39,176,0.8)',
+              color: 'white',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '0.9rem'
+            }}
+          >
+            📁 Import
+          </button>
           
           {/* Export buttons */}
           <button
