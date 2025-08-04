@@ -44,6 +44,7 @@ function SimpleApp() {
   const [selectedTool, setSelectedTool] = useState<'select' | 'vocabulary' | 'practice' | 'test' | 'operate' | 'edge' | 'entry' | 'exit'>('select');
   const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
+  const [pendingEntryExit, setPendingEntryExit] = useState<{type: 'entry' | 'exit', nodeId?: string} | null>(null);
   const [dragOffset, setDragOffset] = useState<Point>({ x: 0, y: 0 });
   const [hasSavedDragHistory, setHasSavedDragHistory] = useState<boolean>(false);
   const [editingNode, setEditingNode] = useState<string | null>(null);
@@ -366,6 +367,22 @@ function SimpleApp() {
       maxY = Math.max(maxY, node.position.y + halfHeight);
     });
 
+    // Check entry/exit arrow points
+    edges.forEach(edge => {
+      if (edge.type === 'entry' && edge.entryPoint) {
+        minX = Math.min(minX, edge.entryPoint.x);
+        maxX = Math.max(maxX, edge.entryPoint.x);
+        minY = Math.min(minY, edge.entryPoint.y);
+        maxY = Math.max(maxY, edge.entryPoint.y);
+      }
+      if (edge.type === 'exit' && edge.exitPoint) {
+        minX = Math.min(minX, edge.exitPoint.x);
+        maxX = Math.max(maxX, edge.exitPoint.x);
+        minY = Math.min(minY, edge.exitPoint.y);
+        maxY = Math.max(maxY, edge.exitPoint.y);
+      }
+    });
+
     // Add padding
     const padding = 50;
     minX -= padding;
@@ -642,18 +659,55 @@ function SimpleApp() {
     // Save state before adding
     saveToHistory();
     
-    // Handle entry and exit arrows
-    if (selectedTool === 'entry' || selectedTool === 'exit') {
+    // Handle pending entry arrow completion
+    if (pendingEntryExit?.type === 'entry' && pendingEntryExit.nodeId) {
+      saveToHistory();
+      const targetNode = nodes.find(n => n.id === pendingEntryExit.nodeId)!;
+      
       const newEdge: Edge = {
         id: Date.now().toString(),
-        source: selectedTool === 'entry' ? null : 'standalone',
-        target: selectedTool === 'exit' ? null : 'standalone',
-        type: selectedTool,
-        position: { x, y },
-        entryPoint: selectedTool === 'entry' ? { x, y } : undefined,
-        exitPoint: selectedTool === 'exit' ? { x, y } : undefined
+        source: null,
+        target: pendingEntryExit.nodeId,
+        type: 'entry',
+        entryPoint: { x, y },
+        exitPoint: { x: targetNode.position.x, y: targetNode.position.y }
       };
+      
       setEdges([...edges, newEdge]);
+      setPendingEntryExit(null);
+      setSelectedNodes([]);
+      return;
+    }
+
+    // Handle pending exit arrow completion
+    if (pendingEntryExit?.type === 'exit' && pendingEntryExit.nodeId) {
+      saveToHistory();
+      const sourceNode = nodes.find(n => n.id === pendingEntryExit.nodeId)!;
+      
+      const newEdge: Edge = {
+        id: Date.now().toString(),
+        source: pendingEntryExit.nodeId,
+        target: null,
+        type: 'exit',
+        exitPoint: { x, y },
+        entryPoint: { x: sourceNode.position.x, y: sourceNode.position.y }
+      };
+      
+      setEdges([...edges, newEdge]);
+      setPendingEntryExit(null);
+      setSelectedNodes([]);
+      return;
+    }
+    
+    // Entry arrows are now created by clicking node first, then canvas
+    if (selectedTool === 'entry') {
+      // Do nothing - entry arrows must target a node first
+      return;
+    }
+    
+    // Exit arrows are now created by clicking node first, then canvas
+    if (selectedTool === 'exit') {
+      // Do nothing - exit arrows must start from a node
       return;
     }
     
@@ -755,6 +809,14 @@ function SimpleApp() {
           setSelectedNodes([]);
         }
       }
+    } else if (selectedTool === 'entry') {
+      // Entry arrow: set target node, user will click on canvas for start point
+      setPendingEntryExit({ type: 'entry', nodeId: nodeId });
+      setSelectedNodes([nodeId]);
+    } else if (selectedTool === 'exit') {
+      // Exit arrow: set source node, user will click on canvas for endpoint
+      setPendingEntryExit({ type: 'exit', nodeId: nodeId });
+      setSelectedNodes([nodeId]);
     } else {
       setSelectedNodes([nodeId]);
     }
@@ -1050,6 +1112,42 @@ function SimpleApp() {
   const exportAsSVG = () => {
     const bounds = calculateDiagramBounds();
     
+    // Calculate appropriate font size based on diagram scale
+    // Use a consistent font size that works well for export (slightly larger than canvas)
+    const exportFontSize = 14; // Slightly larger for better readability in exported SVG
+    
+    // Helper function to create wrapped text for long labels
+    const createWrappedText = (text: string, x: number, y: number, maxWidth: number, className: string = 'node-text', fill: string = '#000000') => {
+      const words = text.split(' ');
+      if (words.length === 1 && text.length <= 12) {
+        // Short single word, no wrapping needed
+        return `<text x="${x}" y="${y}" font-size="${exportFontSize}" class="${className}" fill="${fill}">${text}</text>`;
+      }
+      
+      // For longer text, create multiple lines
+      const lines = [];
+      let currentLine = '';
+      const maxCharsPerLine = Math.floor(maxWidth / (exportFontSize * 0.6)); // Estimate character width
+      
+      for (const word of words) {
+        if ((currentLine + word).length <= maxCharsPerLine) {
+          currentLine += (currentLine ? ' ' : '') + word;
+        } else {
+          if (currentLine) lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+      
+      // Generate SVG for multiple lines
+      const lineHeight = exportFontSize * 1.2;
+      const startY = y - ((lines.length - 1) * lineHeight) / 2;
+      
+      return lines.map((line, index) => 
+        `<text x="${x}" y="${startY + index * lineHeight}" font-size="${exportFontSize}" class="${className}" fill="${fill}">${line}</text>`
+      ).join('');
+    };
+    
     // Create SVG content with dynamic sizing
     const svgContent = `
       <svg width="${bounds.width}" height="${bounds.height}" viewBox="${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}" xmlns="http://www.w3.org/2000/svg">
@@ -1057,6 +1155,19 @@ function SimpleApp() {
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
             <polygon points="0 0, 10 3.5, 0 7" fill="#666"/>
           </marker>
+          <style>
+            .node-text { 
+              font-family: system-ui, -apple-system, sans-serif; 
+              font-weight: bold;
+              text-anchor: middle;
+              dominant-baseline: central;
+            }
+            .edge-text { 
+              font-family: system-ui, -apple-system, sans-serif; 
+              font-weight: bold;
+              text-anchor: middle;
+            }
+          </style>
         </defs>
         <rect width="100%" height="100%" fill="#fafafa"/>
         
@@ -1064,11 +1175,125 @@ function SimpleApp() {
         ${edges.map(edge => {
           const sourceNode = nodes.find(n => n.id === edge.source);
           const targetNode = nodes.find(n => n.id === edge.target);
+          const color = getEdgeColor(edge.type, edge.isResultant);
+          const dashArray = edge.isResultant ? 'stroke-dasharray="5,5"' : '';
+          
+          // Handle entry arrows (null source, points TO a node)
+          if (edge.type === 'entry' && edge.target && edge.entryPoint) {
+            const targetNode = nodes.find(n => n.id === edge.target);
+            if (targetNode) {
+              // Calculate direction from entry point to target node center
+              const dx = targetNode.position.x - edge.entryPoint.x;
+              const dy = targetNode.position.y - edge.entryPoint.y;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              
+              if (length > 0) {
+                const dirX = dx / length;
+                const dirY = dy / length;
+                
+                // Calculate intersection with target node boundary
+                const targetDim = getNodeDimensions(targetNode);
+                let targetRadius;
+                
+                if (targetNode.type === 'vocabulary') {
+                  // Ellipse intersection
+                  const rx = targetDim.width / 2;
+                  const ry = targetDim.height / 2;
+                  const cosTheta = Math.abs(dirX);
+                  const sinTheta = Math.abs(dirY);
+                  targetRadius = 1 / Math.sqrt((cosTheta * cosTheta) / (rx * rx) + (sinTheta * sinTheta) / (ry * ry));
+                } else if (targetNode.type === 'test') {
+                  // Diamond shape
+                  targetRadius = targetDim.radius * 1.2;
+                } else {
+                  // Rectangle intersection (practice, operate)
+                  const halfWidth = targetDim.width / 2;
+                  const halfHeight = targetDim.height / 2;
+                  
+                  if (Math.abs(dirX) > Math.abs(dirY)) {
+                    targetRadius = halfWidth / Math.abs(dirX);
+                  } else {
+                    targetRadius = halfHeight / Math.abs(dirY);
+                  }
+                }
+                
+                // Calculate end point at node boundary
+                const x2 = targetNode.position.x - dirX * targetRadius;
+                const y2 = targetNode.position.y - dirY * targetRadius;
+                
+                return `
+                  <line x1="${edge.entryPoint.x}" y1="${edge.entryPoint.y}" 
+                        x2="${x2}" y2="${y2}" 
+                        stroke="${color}" stroke-width="3" ${dashArray} marker-end="url(#arrowhead)"/>
+                  <text x="${(edge.entryPoint.x + x2) / 2}" y="${(edge.entryPoint.y + y2) / 2 - 10}" 
+                        font-size="${exportFontSize}" class="edge-text" fill="${color}">
+                    ENTRY
+                  </text>
+                `;
+              }
+            }
+          }
+          
+          // Handle exit arrows (null target, starts FROM a node)
+          if (edge.type === 'exit' && edge.source && edge.exitPoint) {
+            const sourceNode = nodes.find(n => n.id === edge.source);
+            if (sourceNode) {
+              // Calculate direction from source node center to exit point
+              const dx = edge.exitPoint.x - sourceNode.position.x;
+              const dy = edge.exitPoint.y - sourceNode.position.y;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              
+              if (length > 0) {
+                const dirX = dx / length;
+                const dirY = dy / length;
+                
+                // Calculate intersection with source node boundary
+                const sourceDim = getNodeDimensions(sourceNode);
+                let sourceRadius;
+                
+                if (sourceNode.type === 'vocabulary') {
+                  // Ellipse intersection
+                  const rx = sourceDim.width / 2;
+                  const ry = sourceDim.height / 2;
+                  const cosTheta = Math.abs(dirX);
+                  const sinTheta = Math.abs(dirY);
+                  sourceRadius = 1 / Math.sqrt((cosTheta * cosTheta) / (rx * rx) + (sinTheta * sinTheta) / (ry * ry));
+                } else if (sourceNode.type === 'test') {
+                  // Diamond shape
+                  sourceRadius = sourceDim.radius * 1.2;
+                } else {
+                  // Rectangle intersection (practice, operate)
+                  const halfWidth = sourceDim.width / 2;
+                  const halfHeight = sourceDim.height / 2;
+                  
+                  if (Math.abs(dirX) > Math.abs(dirY)) {
+                    sourceRadius = halfWidth / Math.abs(dirX);
+                  } else {
+                    sourceRadius = halfHeight / Math.abs(dirY);
+                  }
+                }
+                
+                // Calculate start point at node boundary
+                const x1 = sourceNode.position.x + dirX * sourceRadius;
+                const y1 = sourceNode.position.y + dirY * sourceRadius;
+                
+                return `
+                  <line x1="${x1}" y1="${y1}" 
+                        x2="${edge.exitPoint.x}" y2="${edge.exitPoint.y}" 
+                        stroke="${color}" stroke-width="3" ${dashArray} marker-end="url(#arrowhead)"/>
+                  <text x="${(x1 + edge.exitPoint.x) / 2}" y="${(y1 + edge.exitPoint.y) / 2 - 10}" 
+                        font-size="${exportFontSize}" class="edge-text" fill="${color}">
+                    EXIT
+                  </text>
+                `;
+              }
+            }
+          }
+          
+          // Skip regular edge processing if no source or target
           if (!sourceNode || !targetNode) return '';
           
-          const color = getEdgeColor(edge.type, edge.isResultant);
           const coords = calculateEdgeOffset(edge, edges);
-          const dashArray = edge.isResultant ? 'stroke-dasharray="5,5"' : '';
           const isLoop = sourceNode.id === targetNode.id;
           
           if (isLoop) {
@@ -1078,7 +1303,7 @@ function SimpleApp() {
                     stroke="${color}" stroke-width="2" fill="none" ${dashArray} marker-end="url(#arrowhead)"/>
               <text x="${sourceNode.position.x}" 
                     y="${sourceNode.position.y - 50}" 
-                    text-anchor="middle" font-size="12" fill="${color}" font-weight="bold">
+                    text-anchor="middle" font-size="${exportFontSize}" fill="${color}" font-weight="bold">
                 ${edge.type}
               </text>
             `;
@@ -1090,7 +1315,7 @@ function SimpleApp() {
                     stroke="${color}" stroke-width="2" ${dashArray} marker-end="url(#arrowhead)"/>
               <text x="${(coords.x1 + coords.x2) / 2}" 
                     y="${(coords.y1 + coords.y2) / 2 - 10}" 
-                    text-anchor="middle" font-size="12" fill="${color}" font-weight="bold">
+                    text-anchor="middle" font-size="${exportFontSize}" fill="${color}" font-weight="bold">
                 ${edge.type}
               </text>
             `;
@@ -1108,8 +1333,7 @@ function SimpleApp() {
             return `
               <ellipse cx="${node.position.x}" cy="${node.position.y}" 
                        rx="${dimensions.radius}" ry="${dimensions.height/2}" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
-              <text x="${node.position.x}" y="${node.position.y + 5}" 
-                    text-anchor="middle" font-size="12" font-weight="bold" fill="${node.style?.textColor || '#000000'}">${node.label}</text>
+              ${createWrappedText(node.label, node.position.x, node.position.y, dimensions.width * 0.8, 'node-text', node.style?.textColor || '#000000')}
             `;
           } else if (node.type === 'test') {
             const halfSize = dimensions.width / 2;
@@ -1117,15 +1341,13 @@ function SimpleApp() {
               <g transform="translate(${node.position.x}, ${node.position.y}) rotate(45)">
                 <rect x="-${halfSize}" y="-${halfSize}" width="${dimensions.width}" height="${dimensions.height}" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
               </g>
-              <text x="${node.position.x}" y="${node.position.y + 5}" 
-                    text-anchor="middle" font-size="12" font-weight="bold" fill="${node.style?.textColor || '#000000'}">${node.label}</text>
+              ${createWrappedText(node.label, node.position.x, node.position.y, dimensions.width * 0.7, 'node-text', node.style?.textColor || '#000000')}
             `;
           } else {
             return `
               <rect x="${node.position.x - dimensions.radius}" y="${node.position.y - dimensions.height/2}" 
                     width="${dimensions.width}" height="${dimensions.height}" rx="8" fill="${bgColor}" stroke="${borderColor}" stroke-width="2"/>
-              <text x="${node.position.x}" y="${node.position.y + 5}" 
-                    text-anchor="middle" font-size="12" font-weight="bold" fill="${node.style?.textColor || '#000000'}">${node.label}</text>
+              ${createWrappedText(node.label, node.position.x, node.position.y, dimensions.width * 0.8, 'node-text', node.style?.textColor || '#000000')}
             `;
           }
         }).join('')}
@@ -1540,24 +1762,68 @@ ${tikzCode}
         <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
           <g transform={`translate(${canvasPan.x}, ${canvasPan.y}) scale(${canvasZoom})`}>
           {edges.map(edge => {
-            // Handle entry and exit arrows
-            if (edge.type === 'entry' && edge.entryPoint) {
+            // Handle entry arrows (null source, points TO a node)
+            if (edge.type === 'entry' && edge.target && edge.entryPoint) {
+              const targetNode = nodes.find(n => n.id === edge.target);
+              if (!targetNode) return null;
+              
+              // Calculate direction from entry point to target node center
+              const dx = targetNode.position.x - edge.entryPoint.x;
+              const dy = targetNode.position.y - edge.entryPoint.y;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              
+              if (length === 0) return null;
+              
+              const dirX = dx / length;
+              const dirY = dy / length;
+              
+              // Calculate intersection with target node boundary
+              const targetDim = getNodeDimensions(targetNode);
+              let targetRadius;
+              
+              if (targetNode.type === 'vocabulary') {
+                // Ellipse intersection
+                const rx = targetDim.width / 2;
+                const ry = targetDim.height / 2;
+                const cosTheta = Math.abs(dirX);
+                const sinTheta = Math.abs(dirY);
+                targetRadius = 1 / Math.sqrt((cosTheta * cosTheta) / (rx * rx) + (sinTheta * sinTheta) / (ry * ry));
+              } else if (targetNode.type === 'test') {
+                // Diamond shape
+                targetRadius = targetDim.radius * 1.2;
+              } else {
+                // Rectangle intersection (practice, operate)
+                const halfWidth = targetDim.width / 2;
+                const halfHeight = targetDim.height / 2;
+                
+                if (Math.abs(dirX) > Math.abs(dirY)) {
+                  targetRadius = halfWidth / Math.abs(dirX);
+                } else {
+                  targetRadius = halfHeight / Math.abs(dirY);
+                }
+              }
+              
+              // Calculate end point at node boundary
+              const x2 = targetNode.position.x - dirX * targetRadius;
+              const y2 = targetNode.position.y - dirY * targetRadius;
+              
               return (
                 <g key={edge.id}>
                   <line
-                    x1={edge.entryPoint.x - 40}
+                    x1={edge.entryPoint.x}
                     y1={edge.entryPoint.y}
-                    x2={edge.entryPoint.x}
-                    y2={edge.entryPoint.y}
+                    x2={x2}
+                    y2={y2}
                     stroke={getEdgeColor(edge.type, edge.isResultant)}
                     strokeWidth="3"
+                    strokeDasharray={edge.isResultant ? "5,5" : "none"}
                     markerEnd="url(#arrowhead)"
                     style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                     onClick={(e) => handleEdgeClick(edge.id, e)}
                   />
                   <text
-                    x={edge.entryPoint.x - 50}
-                    y={edge.entryPoint.y - 10}
+                    x={(edge.entryPoint.x + x2) / 2}
+                    y={(edge.entryPoint.y + y2) / 2 - 10}
                     textAnchor="middle"
                     fontSize="12"
                     fill={getEdgeColor(edge.type, edge.isResultant)}
@@ -1571,23 +1837,68 @@ ${tikzCode}
               );
             }
             
-            if (edge.type === 'exit' && edge.exitPoint) {
+            // Handle exit arrows (null target, starts FROM a node)
+            if (edge.type === 'exit' && edge.source && edge.exitPoint) {
+              const sourceNode = nodes.find(n => n.id === edge.source);
+              if (!sourceNode) return null;
+              
+              // Calculate direction from source node center to exit point
+              const dx = edge.exitPoint.x - sourceNode.position.x;
+              const dy = edge.exitPoint.y - sourceNode.position.y;
+              const length = Math.sqrt(dx * dx + dy * dy);
+              
+              if (length === 0) return null;
+              
+              const dirX = dx / length;
+              const dirY = dy / length;
+              
+              // Calculate intersection with source node boundary
+              const sourceDim = getNodeDimensions(sourceNode);
+              let sourceRadius;
+              
+              if (sourceNode.type === 'vocabulary') {
+                // Ellipse intersection
+                const rx = sourceDim.width / 2;
+                const ry = sourceDim.height / 2;
+                const cosTheta = Math.abs(dirX);
+                const sinTheta = Math.abs(dirY);
+                sourceRadius = 1 / Math.sqrt((cosTheta * cosTheta) / (rx * rx) + (sinTheta * sinTheta) / (ry * ry));
+              } else if (sourceNode.type === 'test') {
+                // Diamond shape
+                sourceRadius = sourceDim.radius * 1.2;
+              } else {
+                // Rectangle intersection (practice, operate)
+                const halfWidth = sourceDim.width / 2;
+                const halfHeight = sourceDim.height / 2;
+                
+                if (Math.abs(dirX) > Math.abs(dirY)) {
+                  sourceRadius = halfWidth / Math.abs(dirX);
+                } else {
+                  sourceRadius = halfHeight / Math.abs(dirY);
+                }
+              }
+              
+              // Calculate start point at node boundary
+              const x1 = sourceNode.position.x + dirX * sourceRadius;
+              const y1 = sourceNode.position.y + dirY * sourceRadius;
+              
               return (
                 <g key={edge.id}>
                   <line
-                    x1={edge.exitPoint.x}
-                    y1={edge.exitPoint.y}
-                    x2={edge.exitPoint.x + 40}
+                    x1={x1}
+                    y1={y1}
+                    x2={edge.exitPoint.x}
                     y2={edge.exitPoint.y}
                     stroke={getEdgeColor(edge.type, edge.isResultant)}
                     strokeWidth="3"
+                    strokeDasharray={edge.isResultant ? "5,5" : "none"}
                     markerEnd="url(#arrowhead)"
                     style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                     onClick={(e) => handleEdgeClick(edge.id, e)}
                   />
                   <text
-                    x={edge.exitPoint.x + 50}
-                    y={edge.exitPoint.y - 10}
+                    x={(x1 + edge.exitPoint.x) / 2}
+                    y={(y1 + edge.exitPoint.y) / 2 - 10}
                     textAnchor="middle"
                     fontSize="12"
                     fill={getEdgeColor(edge.type, edge.isResultant)}
@@ -1928,6 +2239,82 @@ ${tikzCode}
           >
             ⚙️ Modify Edge
           </button>
+        )}
+
+        {/* Status indicator for pending exit arrow */}
+        {pendingEntryExit?.type === 'exit' && (
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '8px 16px',
+            background: 'rgba(76, 175, 80, 0.9)',
+            color: 'white',
+            borderRadius: '4px',
+            fontSize: '14px',
+            zIndex: 1000,
+            pointerEvents: 'none'
+          }}>
+            📍 Click on canvas to set exit arrow endpoint
+          </div>
+        )}
+
+        {/* Status indicator for pending entry arrow */}
+        {pendingEntryExit?.type === 'entry' && (
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '8px 16px',
+            background: 'rgba(76, 175, 80, 0.9)',
+            color: 'white',
+            borderRadius: '4px',
+            fontSize: '14px',
+            zIndex: 1000,
+            pointerEvents: 'none'
+          }}>
+            📍 Click on canvas to set entry arrow start point
+          </div>
+        )}
+
+        {/* Status indicator for entry tool */}
+        {selectedTool === 'entry' && !pendingEntryExit && (
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '8px 16px',
+            background: 'rgba(76, 175, 80, 0.9)',
+            color: 'white',
+            borderRadius: '4px',
+            fontSize: '14px',
+            zIndex: 1000,
+            pointerEvents: 'none'
+          }}>
+            📍 Click on a node to target entry arrow
+          </div>
+        )}
+
+        {/* Status indicator for exit tool */}
+        {selectedTool === 'exit' && !pendingEntryExit && (
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '8px 16px',
+            background: 'rgba(139, 195, 74, 0.9)',
+            color: 'white',
+            borderRadius: '4px',
+            fontSize: '14px',
+            zIndex: 1000,
+            pointerEvents: 'none'
+          }}>
+            📍 Click on a node to start exit arrow
+          </div>
         )}
 
         {/* Edge Type Selector Modal */}

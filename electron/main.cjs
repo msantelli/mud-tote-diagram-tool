@@ -277,7 +277,7 @@ function createMenu() {
               type: 'info',
               title: 'About',
               message: 'MUD & TOTE Diagram Tool',
-              detail: 'Interactive visualization tool for Meaning-Use Diagrams and TOTE Cycles based on Robert Brandom\'s philosophical framework.\n\nVersion: 1.0.0\nBuilt with Electron and React'
+              detail: 'Interactive visualization tool for Meaning-Use Diagrams and TOTE Cycles based on Robert Brandom\'s philosophical framework.\n\nVersion: 1.0.0\nAuthor: Mauro Santelli\nInstitution: Universidad de Buenos Aires - Instituto de Investigaciones Filosóficas, SADAF (CONICET) - GEML\nContact: mesantelli@uba.ar\n\nBuilt with Electron and React'
             });
           }
         },
