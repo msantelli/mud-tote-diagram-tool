@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './', // Critical for Electron builds
   plugins: [
     react(),
     VitePWA({
@@ -49,6 +50,10 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    emptyOutDir: true,
+    outDir: 'dist'
+  },
   server: {
     host: true, // Listen on all addresses
     port: 5173,

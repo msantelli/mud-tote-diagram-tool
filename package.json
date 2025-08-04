@@ -90,8 +90,7 @@
             "x64"
           ]
         }
-      ],
-      "icon": "public/icons/icon.svg"
+      ]
     },
     "mac": {
       "target": {

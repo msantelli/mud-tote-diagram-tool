@@ -32,7 +32,10 @@ function createWindow() {
     // Open DevTools in development
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    // Use file:// protocol with proper path resolution for production
+    const htmlPath = path.join(__dirname, '../dist/index.html');
+    console.log('Loading HTML from:', htmlPath);
+    mainWindow.loadFile(htmlPath);
   }
 
   // Show window when ready to prevent visual flash
@@ -44,6 +47,20 @@ function createWindow() {
       mainWindow.focus();
     }
   });
+
+  // Debug: Log page load events
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('Page finished loading');
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('Page failed to load:', errorCode, errorDescription, validatedURL);
+  });
+
+  // Debug: Enable DevTools in production for troubleshooting (remove later)
+  if (!isDev) {
+    mainWindow.webContents.openDevTools();
+  }
 
   // Handle window closed
   mainWindow.on('closed', () => {
