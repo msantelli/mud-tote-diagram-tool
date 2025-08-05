@@ -1607,7 +1607,24 @@ ${tikzCode}
         alignItems: 'center'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <h1 style={{ margin: 0 }}>MUD & TOTE Diagram Tool</h1>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <h1 style={{ margin: 0 }}>MUD & TOTE Diagram Tool</h1>
+            <a 
+              href="https://orcid.org/0000-0002-4422-3535" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              style={{ 
+                fontSize: '0.8rem', 
+                color: 'rgba(255,255,255,0.7)', 
+                textDecoration: 'none',
+                marginTop: '2px'
+              }}
+              onMouseEnter={(e) => (e.target as HTMLAnchorElement).style.color = 'rgba(255,255,255,0.9)'}
+              onMouseLeave={(e) => (e.target as HTMLAnchorElement).style.color = 'rgba(255,255,255,0.7)'}
+            >
+              by Mauro Santelli
+            </a>
+          </div>
           
           {/* Mode Selector */}
           <div style={{ display: 'flex', gap: '2px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', padding: '2px' }}>
