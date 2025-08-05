@@ -26,7 +26,7 @@ interface Edge {
   id: string;
   source: string | null; // null for entry arrows
   target: string | null; // null for exit arrows
-  type: 'PV' | 'VP' | 'PP' | 'VV' | 'PV-suff' | 'PV-nec' | 'VP-suff' | 'VP-nec' | 'PP-suff' | 'PP-nec' | 'VV-suff' | 'VV-nec' | 'sequence' | 'feedback' | 'loop' | 'exit' | 'entry';
+  type: 'PV' | 'VP' | 'PP' | 'VV' | 'PV-suff' | 'PV-nec' | 'VP-suff' | 'VP-nec' | 'PP-suff' | 'PP-nec' | 'VV-suff' | 'VV-nec' | 'sequence' | 'feedback' | 'loop' | 'exit' | 'entry' | 'unmarked';
   isResultant?: boolean; // Toggle for resultant relationships (dotted lines)
   // For entry/exit arrows, store position
   position?: Point;
@@ -53,6 +53,7 @@ function SimpleApp() {
   const [showEdgeTypeSelector, setShowEdgeTypeSelector] = useState<boolean>(false);
   const [pendingEdge, setPendingEdge] = useState<{source: string, target: string} | null>(null);
   const [autoDetectEdges, setAutoDetectEdges] = useState<boolean>(true);
+  const [showUnmarkedEdges, setShowUnmarkedEdges] = useState<boolean>(false);
   const [selectedNodeForCustomization, setSelectedNodeForCustomization] = useState<string | null>(null);
   const [showCustomizationPanel, setShowCustomizationPanel] = useState<boolean>(false);
   const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
@@ -425,20 +426,25 @@ function SimpleApp() {
   };
 
   const getAvailableEdgeTypes = (mode: DiagramMode, _sourceType?: string, _targetType?: string, isAutoDetect: boolean = true): Edge['type'][] => {
+    let baseTypes: Edge['type'][] = [];
+    
     if (mode === 'MUD') {
       if (isAutoDetect) {
-        return ['PV', 'VP', 'PP', 'VV'] as Edge['type'][];
+        baseTypes = ['PV', 'VP', 'PP', 'VV'] as Edge['type'][];
       } else {
         // Manual mode: return qualified types
-        return ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'] as Edge['type'][];
+        baseTypes = ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'] as Edge['type'][];
       }
     } else if (mode === 'TOTE') {
-      return ['sequence', 'feedback', 'loop', 'exit', 'entry'] as Edge['type'][];
+      baseTypes = ['sequence', 'feedback', 'loop', 'exit', 'entry'] as Edge['type'][];
     } else {
       // HYBRID mode
       const mudTypes = isAutoDetect ? ['PV', 'VP', 'PP', 'VV'] as Edge['type'][] : ['PV-suff', 'PV-nec', 'VP-suff', 'VP-nec', 'PP-suff', 'PP-nec', 'VV-suff', 'VV-nec'] as Edge['type'][];
-      return [...mudTypes, 'sequence', 'feedback', 'loop', 'exit', 'entry'] as Edge['type'][];
+      baseTypes = [...mudTypes, 'sequence', 'feedback', 'loop', 'exit', 'entry'] as Edge['type'][];
     }
+    
+    // Always include unmarked edges as an option
+    return [...baseTypes, 'unmarked'] as Edge['type'][];
   };
 
   // Helper functions for node styling
@@ -776,8 +782,21 @@ function SimpleApp() {
         const sourceNode = nodes.find(n => n.id === selectedNodes[0])!;
         const targetNode = nodes.find(n => n.id === nodeId)!;
         
-        // Use auto-detection if enabled, otherwise show selector
-        if (autoDetectEdges && diagramMode === 'MUD') {
+        // Check if unmarked edges mode is enabled
+        if (showUnmarkedEdges) {
+          // Save state before creating edge
+          saveToHistory();
+          
+          const newEdge: Edge = {
+            id: Date.now().toString(),
+            source: selectedNodes[0],
+            target: nodeId,
+            type: 'unmarked'
+          };
+          
+          setEdges([...edges, newEdge]);
+          setSelectedNodes([]);
+        } else if (autoDetectEdges && diagramMode === 'MUD') {
           // Save state before creating edge
           saveToHistory();
           
@@ -1301,11 +1320,11 @@ function SimpleApp() {
             return `
               <path d="M ${coords.x1} ${coords.y1} A 30 30 0 1 1 ${coords.x2} ${coords.y2}" 
                     stroke="${color}" stroke-width="2" fill="none" ${dashArray} marker-end="url(#arrowhead)"/>
-              <text x="${sourceNode.position.x}" 
+              ${edge.type !== 'unmarked' ? `<text x="${sourceNode.position.x}" 
                     y="${sourceNode.position.y - 50}" 
                     text-anchor="middle" font-size="${exportFontSize}" fill="${color}" font-weight="bold">
                 ${edge.type}
-              </text>
+              </text>` : ''}
             `;
           } else {
             // Use straight line for regular edges
@@ -1313,11 +1332,11 @@ function SimpleApp() {
               <line x1="${coords.x1}" y1="${coords.y1}" 
                     x2="${coords.x2}" y2="${coords.y2}" 
                     stroke="${color}" stroke-width="2" ${dashArray} marker-end="url(#arrowhead)"/>
-              <text x="${(coords.x1 + coords.x2) / 2}" 
+              ${edge.type !== 'unmarked' ? `<text x="${(coords.x1 + coords.x2) / 2}" 
                     y="${(coords.y1 + coords.y2) / 2 - 10}" 
                     text-anchor="middle" font-size="${exportFontSize}" fill="${color}" font-weight="bold">
                 ${edge.type}
-              </text>
+              </text>` : ''}
             `;
           }
         }).join('')}
@@ -1395,6 +1414,66 @@ ${tikzCode}
     URL.revokeObjectURL(url);
   };
 
+  // LaTeX detection and smart escaping functions
+  const isLaTeXContent = (text: string): boolean => {
+    // Check for math mode delimiters
+    const mathModePatterns = [
+      /\$[^$]*\$/,           // Inline math: $...$
+      /\\\([^)]*\\\)/,       // Inline math: \(...\)
+      /\\\[[^\]]*\\\]/,      // Display math: \[...\]
+    ];
+    
+    // Common academic LaTeX commands and symbols
+    const academicSymbols = [
+      // Greek letters
+      /\\(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega)/,
+      /\\(Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega)/,
+      // Mathematical operators and symbols
+      /\\(sum|prod|int|oint|bigcup|bigcap|bigoplus|bigotimes|coprod|bigsqcup|bigvee|bigwedge)/,
+      /\\(infty|partial|nabla|exists|forall|in|notin|subset|subseteq|supset|supseteq|cap|cup|vee|wedge)/,
+      /\\(leq|geq|ll|gg|neq|equiv|sim|simeq|approx|propto|parallel|perp|angle|triangle)/,
+      /\\(cdot|times|div|pm|mp|oplus|ominus|otimes|oslash|odot|star|ast|circ|bullet)/,
+      // Arrows
+      /\\(rightarrow|leftarrow|leftrightarrow|Rightarrow|Leftarrow|Leftrightarrow|mapsto|to)/,
+      /\\(uparrow|downarrow|updownarrow|Uparrow|Downarrow|Updownarrow|nearrow|searrow|swarrow|nwarrow)/,
+      // Text formatting
+      /\\(textbf|textit|texttt|textrm|textsf|textsc|textup|textsl|emph|underline|overline)/,
+      /\\(mathbf|mathit|mathtt|mathrm|mathsf|mathcal|mathbb|mathfrak|mathscr)/,
+      // Mathematical structures
+      /\\(frac|sqrt|binom|choose|left|right|big|Big|bigg|Bigg)/,
+      // Subscripts and superscripts (outside of math mode)
+      /\^{[^}]*}/,                // Superscripts: ^{...}
+      /_{[^}]*}/,                 // Subscripts: _{...}
+      // General LaTeX commands
+      /\\[a-zA-Z]+(\{[^}]*\})*/, // Any LaTeX command with optional arguments
+    ];
+    
+    // Check for math mode
+    for (const pattern of mathModePatterns) {
+      if (pattern.test(text)) return true;
+    }
+    
+    // Check for LaTeX commands and symbols
+    for (const pattern of academicSymbols) {
+      if (pattern.test(text)) return true;
+    }
+    
+    return false;
+  };
+
+  const smartEscapeForTikZ = (text: string): string => {
+    if (isLaTeXContent(text)) {
+      // Preserve LaTeX content, only escape characters that break TikZ syntax
+      return text
+        .replace(/([#%&])/g, '\\$1');  // Escape only TikZ-breaking chars
+    } else {
+      // For plain text, escape special characters in correct order
+      return text
+        .replace(/\\/g, '\\textbackslash{}')  // Handle backslashes first
+        .replace(/([{}#%&_^])/g, '\\$1');     // Then escape other problematic chars
+    }
+  };
+
   const generateTikZCode = (nodes: Node[], edges: Edge[]): string => {
     let tikz = '\\begin{tikzpicture}[>=Stealth]\n';
     
@@ -1430,9 +1509,9 @@ ${tikzCode}
     nodes.forEach(node => {
       const x = convertX(node.position.x);
       const y = convertY(node.position.y);
-      const escapedLabel = node.label.replace(/[{}]/g, '\\$&').replace(/[_^]/g, '\\$&');
+      const smartLabel = smartEscapeForTikZ(node.label);
       
-      tikz += `  \\node[${node.type}] (${node.id}) at (${x}, ${y}) {${escapedLabel}};
+      tikz += `  \\node[${node.type}] (${node.id}) at (${x}, ${y}) {${smartLabel}};
 `;
     });
     
@@ -1489,6 +1568,7 @@ ${tikzCode}
       case 'loop': baseColor = '#607D8B'; break; // Blue Grey
       case 'exit': baseColor = '#8BC34A'; break; // Light Green
       case 'entry': baseColor = '#4CAF50'; break; // Green
+      case 'unmarked': baseColor = '#666666'; break; // Neutral gray
       default: baseColor = '#666'; break;
     }
     
@@ -1579,6 +1659,32 @@ ${tikzCode}
               </label>
             </div>
           )}
+
+          {/* Unmarked edges toggle - available in all modes */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: '1rem' }}>
+            <input
+              type="checkbox"
+              id="unmarked-edges"
+              checked={showUnmarkedEdges}
+              onChange={(e) => setShowUnmarkedEdges(e.target.checked)}
+              style={{
+                width: '16px',
+                height: '16px',
+                cursor: 'pointer'
+              }}
+            />
+            <label
+              htmlFor="unmarked-edges"
+              style={{
+                color: 'white',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                userSelect: 'none'
+              }}
+            >
+              Unmarked edges
+            </label>
+          </div>
         </div>
         
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1976,18 +2082,21 @@ ${tikzCode}
                     />
                   </>
                 )}
-                <text
-                  x={isLoop ? sourceNode.position.x : (coords.x1 + coords.x2) / 2}
-                  y={isLoop ? sourceNode.position.y - 50 : (coords.y1 + coords.y2) / 2 - 10}
-                  textAnchor="middle"
-                  fontSize="11"
-                  fill={getEdgeColor(edge.type, edge.isResultant)}
-                  fontWeight="bold"
-                  style={{ cursor: 'pointer', userSelect: 'none', pointerEvents: 'auto' }}
-                  onClick={(e) => handleEdgeClick(edge.id, e)}
-                >
-                  {edge.type}
-                </text>
+                {/* Only show text label for marked edges */}
+                {edge.type !== 'unmarked' && (
+                  <text
+                    x={isLoop ? sourceNode.position.x : (coords.x1 + coords.x2) / 2}
+                    y={isLoop ? sourceNode.position.y - 50 : (coords.y1 + coords.y2) / 2 - 10}
+                    textAnchor="middle"
+                    fontSize="11"
+                    fill={getEdgeColor(edge.type, edge.isResultant)}
+                    fontWeight="bold"
+                    style={{ cursor: 'pointer', userSelect: 'none', pointerEvents: 'auto' }}
+                    onClick={(e) => handleEdgeClick(edge.id, e)}
+                  >
+                    {edge.type}
+                  </text>
+                )}
               </g>
             );
           })}
@@ -2363,6 +2472,7 @@ ${tikzCode}
                   else if (edgeType === 'loop') description = 'Iterative loop';
                   else if (edgeType === 'exit') description = 'Exit condition';
                   else if (edgeType === 'entry') description = 'Entry point';
+                  else if (edgeType === 'unmarked') description = 'Simple line (no label)';
                   
                   return (
                     <button

@@ -22,6 +22,7 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 - **Manual Mode**: Precise control over semantic relationship specification
 - **Resultant Relationships**: Toggle any edge as resultant/derived (dotted lines)
 - **Directional Arrows**: Clear visual indication of relationship direction
+- **Unmarked Edges**: Simple unlabeled connections for flexible diagram creation
 
 ### Complete TOTE Support
 - **Test Nodes**: Diamond-shaped decision/condition points
@@ -43,7 +44,7 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 ### Academic Export Options
 - **JSON**: Complete diagram data with metadata
 - **SVG**: Vector graphics for presentations and publications
-- **LaTeX/TikZ**: Publication-ready academic diagrams
+- **LaTeX/TikZ**: Publication-ready academic diagrams with smart LaTeX text preservation
 - **Custom Styling**: All exports respect visual customizations
 
 ### Interactive Editing
@@ -52,6 +53,18 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 - **Keyboard Shortcuts**: Delete/Backspace for quick removal
 - **Multi-modal Interface**: Tools adapt to current diagram mode
 
+### LaTeX Text Support
+- **Mathematical Notation**: Full support for LaTeX math mode (`$\alpha$`, `$\beta_{max}$`)
+- **Text Formatting**: LaTeX commands preserved (`\textbf{text}`, `\emph{emphasis}`)
+- **Smart Preservation**: LaTeX syntax maintained in exports while plain text is safely escaped
+- **Academic Symbols**: Greek letters, mathematical operators, and formatting render correctly in LaTeX exports
+
+### Flexible Edge Types
+- **Qualified Relations**: Sufficiency and necessity semantics for precise meaning specification
+- **TOTE Flow Relations**: Sequence, feedback, loop, and exit connections
+- **Unmarked Edges**: Simple gray lines without labels for flexible diagram structure
+- **Resultant Toggle**: Any edge can be marked as derived/resultant with dotted styling
+
 ## Installation
 
 ### Desktop Application (Recommended)
@@ -59,12 +72,12 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 Download the appropriate executable for your operating system:
 
 **Windows:**
-- `MUD & TOTE Diagram Tool Setup 1.0.0.exe` - Full installer with Start Menu integration
-- `MUD & TOTE Diagram Tool 1.0.0.exe` - Portable executable, no installation required
+- `MUD & TOTE Diagram Tool Setup 1.1.0.exe` - Full installer with Start Menu integration
+- `MUD & TOTE Diagram Tool 1.1.0.exe` - Portable executable, no installation required
 
 **Linux:**
-- `MUD & TOTE Diagram Tool-1.0.0.AppImage` - Universal Linux application
-- `mud-tote-tool_1.0.0_amd64.deb` - Debian/Ubuntu package
+- `MUD & TOTE Diagram Tool-1.1.0.AppImage` - Universal Linux application
+- `mud-tote-tool_1.1.0_amd64.deb` - Debian/Ubuntu package
 
 #### Usage Instructions
 
@@ -76,16 +89,16 @@ Download the appropriate executable for your operating system:
 **Linux (AppImage):**
 ```bash
 # Make executable
-chmod +x "MUD & TOTE Diagram Tool-1.0.0.AppImage"
+chmod +x "MUD & TOTE Diagram Tool-1.1.0.AppImage"
 
 # Run application
-./"MUD & TOTE Diagram Tool-1.0.0.AppImage"
+./"MUD & TOTE Diagram Tool-1.1.0.AppImage"
 ```
 
 **Linux (Debian/Ubuntu):**
 ```bash
 # Install package
-sudo dpkg -i mud-tote-tool_1.0.0_amd64.deb
+sudo dpkg -i mud-tote-tool_1.1.0_amd64.deb
 
 # Run from applications menu or terminal
 mud-tote-tool
@@ -114,9 +127,10 @@ npm run build
 
 1. **Choose Diagram Mode**: Select MUD, TOTE, or HYBRID from the mode toggle
 2. **Create Nodes**: Select node type from toolbar and click on canvas
-3. **Connect Elements**: Use Edge tool to create relationships between nodes
-4. **Customize**: Select nodes/edges and use customization panels
-5. **Export**: Save diagrams in JSON, SVG, or LaTeX formats
+3. **Add Labels**: Use LaTeX syntax for mathematical notation (`$\alpha$`, `\beta_{max}$`)
+4. **Connect Elements**: Use Edge tool or enable unmarked edges for flexible connections
+5. **Customize**: Select nodes/edges and use customization panels
+6. **Export**: Save diagrams in JSON, SVG, or LaTeX formats with proper text rendering
 
 ## Academic Context
 
@@ -244,6 +258,8 @@ Modern browsers with ES2020+ support required.
 #### LaTeX/TikZ Output
 - **Standalone Documents**: Complete LaTeX files with TikZ diagrams
 - **Academic Quality**: Publication-ready styling and positioning
+- **LaTeX Text Preservation**: Mathematical notation and formatting commands render correctly
+- **Smart Escaping**: LaTeX syntax preserved while plain text is safely escaped for TikZ compatibility
 - **Custom Colors**: Maintains visual customizations in export
 - **Scalable**: Vector-based output for any document size
 

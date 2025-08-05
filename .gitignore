@@ -29,3 +29,4 @@ FURTHER_WORK.md
 dist-electron/*.exe
 dist-electron/*.AppImage
 dist-electron/*.deb
+dist-electron
