@@ -39,6 +39,10 @@ export const Canvas: React.FC = () => {
     // Clear previous content
     svg.selectAll('*').remove();
 
+    // Create main group first (before zoom behavior that references it)
+    const g = svg.append('g')
+      .attr('class', 'diagram-group');
+
     // Set up zoom behavior
     const zoomBehavior = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
@@ -56,11 +60,9 @@ export const Canvas: React.FC = () => {
       .translate(panOffset.x, panOffset.y)
       .scale(zoom);
     svg.call(zoomBehavior.transform, transform);
-
-    // Create main group
-    const g = svg.append('g')
-      .attr('class', 'diagram-group')
-      .attr('transform', transform.toString());
+    
+    // Apply transform to the group
+    g.attr('transform', transform.toString());
 
     // Add defs for arrow markers
     const defs = svg.append('defs');
