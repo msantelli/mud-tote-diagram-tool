@@ -65,7 +65,24 @@ This interactive diagramming tool implements Robert Brandom's theoretical framew
 - **Unmarked Edges**: Simple gray lines without labels for flexible diagram structure
 - **Resultant Toggle**: Any edge can be marked as derived/resultant with dotted styling
 
+## Live Demo
+
+**🌐 Try the tool online:** [https://mud-tote-tax-tool.netlify.app/](https://mud-tote-tax-tool.netlify.app/)
+
+Experience the full functionality of the MUD & TOTE Diagram Tool directly in your browser. No installation required - perfect for quick experimentation, academic demonstrations, and collaborative work.
+
 ## Installation
+
+### Web Application (Quick Start)
+
+Access the tool instantly at [https://mud-tote-tax-tool.netlify.app/](https://mud-tote-tax-tool.netlify.app/)
+
+**Features:**
+- Full functionality available immediately
+- Cross-platform compatibility
+- Automatic updates
+- Perfect for academic presentations and collaborative work
+- All export formats supported (JSON, SVG, LaTeX/TikZ)
 
 ### Desktop Application (Recommended)
 
@@ -327,8 +344,13 @@ When using this tool in academic work, please cite:
 
 For academic inquiries, technical support, or theoretical questions:
 
+- **Live Demo**: [https://mud-tote-tax-tool.netlify.app/](https://mud-tote-tax-tool.netlify.app/)
 - **Repository**: [GitHub Issues](https://github.com/msantelli/mud-tote-diagram-tool/issues)
-- **Academic Contact**: [Contact information for academic collaboration]
+- **Academic Contact**: [mesantelli@uba.ar](mailto:mesantelli@uba.ar)
+
+---
+
+]
 - **Documentation**: Comprehensive guides in `/docs` directory
 
 ## Acknowledgments
