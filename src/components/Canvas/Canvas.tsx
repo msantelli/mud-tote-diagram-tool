@@ -13,6 +13,9 @@ export const Canvas: React.FC = () => {
   const zoom = useAppSelector(state => state.ui.zoom);
   const panOffset = useAppSelector(state => state.ui.panOffset);
   const dispatch = useAppDispatch();
+  
+  // Flag to prevent infinite loop between Redux and D3 zoom
+  const isUpdatingFromRedux = useRef(false);
 
   // Handle canvas clicks for creating nodes
   const handleCanvasClick = (event: React.MouseEvent<SVGSVGElement>) => {
@@ -47,6 +50,9 @@ export const Canvas: React.FC = () => {
     const zoomBehavior = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
       .on('zoom', (event) => {
+        // Prevent infinite loop when updating from Redux state
+        if (isUpdatingFromRedux.current) return;
+        
         const { transform } = event;
         dispatch(setZoom(transform.k));
         dispatch(setPanOffset({ x: transform.x, y: transform.y }));
@@ -55,11 +61,15 @@ export const Canvas: React.FC = () => {
 
     svg.call(zoomBehavior);
 
-    // Apply current transform
+    // Apply current transform from Redux state
     const transform = d3.zoomIdentity
       .translate(panOffset.x, panOffset.y)
       .scale(zoom);
+    
+    // Set flag to prevent infinite loop
+    isUpdatingFromRedux.current = true;
     svg.call(zoomBehavior.transform, transform);
+    isUpdatingFromRedux.current = false;
     
     // Apply transform to the group
     g.attr('transform', transform.toString());
@@ -239,7 +249,7 @@ export const Canvas: React.FC = () => {
 
     nodeSelection.exit().remove();
 
-  }, [dispatch, edges, moveNode, nodes, panOffset, selectedItems, zoom, selectNode]));
+  }, [dispatch, edges, moveNode, nodes, panOffset, selectedItems, zoom, selectNode, isUpdatingFromRedux]));
 
   // Update canvas size on resize
   useEffect(() => {
