@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 CLAUDE.md
 FURTHER_WORK.md
+AGENTS.md
 
 # Electron distributables (large files)
 dist-electron/*.exe

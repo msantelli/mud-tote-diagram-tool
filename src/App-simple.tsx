@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { InstallPrompt, PWAStatus } from './components/PWAComponents';
 
 // Inline all types here to avoid import issues
@@ -36,6 +36,36 @@ interface Edge {
 }
 
 type DiagramMode = 'MUD' | 'TOTE' | 'HYBRID';
+
+interface ExportedDiagram {
+  nodes: Node[];
+  edges: Edge[];
+  metadata: {
+    created: string;
+    version: string;
+    type: string;
+  };
+}
+
+interface SerializedDiagram {
+  nodes: Node[];
+  edges: Edge[];
+}
+
+declare global {
+  interface Window {
+    exportDiagram?: () => ExportedDiagram;
+    importDiagram?: (diagram: SerializedDiagram) => void;
+    clearDiagram?: () => void;
+    undo?: () => void;
+    redo?: () => void;
+    centerDiagram?: () => void;
+    zoomIn?: () => void;
+    zoomOut?: () => void;
+    resetZoom?: () => void;
+    selectAll?: () => void;
+  }
+}
 
 function SimpleApp() {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -76,7 +106,7 @@ function SimpleApp() {
   const [maxHistorySize] = useState<number>(50);
 
   // History management functions
-  const saveToHistory = () => {
+  const saveToHistory = useCallback(() => {
     const currentState: HistoryState = {
       nodes: JSON.parse(JSON.stringify(nodes)), // Deep copy
       edges: JSON.parse(JSON.stringify(edges))  // Deep copy
@@ -96,9 +126,9 @@ function SimpleApp() {
     }
     
     setHistory(newHistory);
-  };
+  }, [edges, history, historyIndex, maxHistorySize, nodes]);
 
-  const undo = () => {
+  const undo = useCallback(() => {
     if (historyIndex > 0) {
       const prevState = history[historyIndex - 1];
       setNodes(prevState.nodes);
@@ -107,9 +137,9 @@ function SimpleApp() {
       setSelectedNodes([]);
       setSelectedEdges([]);
     }
-  };
+  }, [history, historyIndex]);
 
-  const redo = () => {
+  const redo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       const nextState = history[historyIndex + 1];
       setNodes(nextState.nodes);
@@ -118,21 +148,115 @@ function SimpleApp() {
       setSelectedNodes([]);
       setSelectedEdges([]);
     }
-  };
+  }, [history, historyIndex]);
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
+
+  // Coordinate transformation functions
+  const screenToWorld = useCallback((screenPoint: Point): Point => ({
+    x: (screenPoint.x - canvasPan.x) / canvasZoom,
+    y: (screenPoint.y - canvasPan.y) / canvasZoom,
+  }), [canvasPan, canvasZoom]);
+
+  const worldToScreen = useCallback((worldPoint: Point): Point => ({
+    x: worldPoint.x * canvasZoom + canvasPan.x,
+    y: worldPoint.y * canvasZoom + canvasPan.y,
+  }), [canvasPan, canvasZoom]);
+
+  // Calculate diagram bounds for centering and export
+  const calculateDiagramBounds = useCallback(() => {
+    if (nodes.length === 0) {
+      return { minX: 0, minY: 0, maxX: 800, maxY: 600, width: 800, height: 600 };
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    // Check all nodes
+    nodes.forEach(node => {
+      const dimensions = getNodeDimensions(node);
+      const halfWidth = dimensions.width / 2;
+      const halfHeight = dimensions.height / 2;
+
+      minX = Math.min(minX, node.position.x - halfWidth);
+      maxX = Math.max(maxX, node.position.x + halfWidth);
+      minY = Math.min(minY, node.position.y - halfHeight);
+      maxY = Math.max(maxY, node.position.y + halfHeight);
+    });
+
+    // Check entry/exit arrow points
+    edges.forEach(edge => {
+      if (edge.type === 'entry' && edge.entryPoint) {
+        minX = Math.min(minX, edge.entryPoint.x);
+        maxX = Math.max(maxX, edge.entryPoint.x);
+        minY = Math.min(minY, edge.entryPoint.y);
+        maxY = Math.max(maxY, edge.entryPoint.y);
+      }
+      if (edge.type === 'exit' && edge.exitPoint) {
+        minX = Math.min(minX, edge.exitPoint.x);
+        maxX = Math.max(maxX, edge.exitPoint.x);
+        minY = Math.min(minY, edge.exitPoint.y);
+        maxY = Math.max(maxY, edge.exitPoint.y);
+      }
+    });
+
+    // Add padding
+    const padding = 50;
+    minX -= padding;
+    minY -= padding;
+    maxX += padding;
+    maxY += padding;
+
+    return {
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY,
+    };
+  }, [edges, nodes]);
+
+  const centerDiagram = useCallback(() => {
+    if (!canvasRef.current) return;
+
+    const bounds = calculateDiagramBounds();
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+
+    // Calculate the center of the canvas
+    const canvasCenterX = canvasRect.width / 2;
+    const canvasCenterY = canvasRect.height / 2;
+
+    // Calculate the center of the diagram
+    const diagramCenterX = (bounds.minX + bounds.maxX) / 2;
+    const diagramCenterY = (bounds.minY + bounds.maxY) / 2;
+
+    // Calculate the optimal zoom to fit the diagram
+    const scaleX = (canvasRect.width * 0.8) / bounds.width;
+    const scaleY = (canvasRect.height * 0.8) / bounds.height;
+    const optimalZoom = Math.min(scaleX, scaleY, 2.0); // Cap at 2x zoom
+
+    // Set the pan to center the diagram
+    setCanvasZoom(optimalZoom);
+    setCanvasPan({
+      x: canvasCenterX - diagramCenterX * optimalZoom,
+      y: canvasCenterY - diagramCenterY * optimalZoom,
+    });
+  }, [calculateDiagramBounds]);
 
   // Initialize history with empty state
   useEffect(() => {
     if (history.length === 0) {
       saveToHistory();
     }
-  }, []);
+  }, [history.length, saveToHistory]);
 
   // Expose functions to global window for Electron menu integration
   useEffect(() => {
-    (window as any).exportDiagram = () => ({
+    window.exportDiagram = () => ({
       nodes,
       edges,
       metadata: {
@@ -142,7 +266,7 @@ function SimpleApp() {
       }
     });
 
-    (window as any).importDiagram = (diagram: any) => {
+    window.importDiagram = (diagram: SerializedDiagram) => {
       try {
         if (diagram.nodes && diagram.edges) {
           if (confirm('This will replace your current diagram. Continue?')) {
@@ -153,8 +277,7 @@ function SimpleApp() {
             
             // Center will be handled by the centerDiagram function exposed separately
             setTimeout(() => {
-              const centerFn = (window as any).centerDiagram;
-              if (centerFn) centerFn();
+              window.centerDiagram?.();
             }, 100);
           }
         }
@@ -163,7 +286,7 @@ function SimpleApp() {
       }
     };
 
-    (window as any).clearDiagram = () => {
+    window.clearDiagram = () => {
       if (confirm('Clear all nodes and edges?')) {
         setNodes([]);
         setEdges([]);
@@ -172,41 +295,41 @@ function SimpleApp() {
       }
     };
 
-    (window as any).undo = undo;
-    (window as any).redo = redo;
-    (window as any).centerDiagram = centerDiagram;
+    window.undo = undo;
+    window.redo = redo;
+    window.centerDiagram = centerDiagram;
 
-    (window as any).zoomIn = () => {
+    window.zoomIn = () => {
       setCanvasZoom(prev => Math.min(3.0, prev * 1.2));
     };
 
-    (window as any).zoomOut = () => {
+    window.zoomOut = () => {
       setCanvasZoom(prev => Math.max(0.1, prev / 1.2));
     };
 
-    (window as any).resetZoom = () => {
+    window.resetZoom = () => {
       setCanvasZoom(1.0);
       setCanvasPan({ x: 0, y: 0 });
     };
 
-    (window as any).selectAll = () => {
+    window.selectAll = () => {
       setSelectedNodes(nodes.map(n => n.id));
     };
 
     // Cleanup on unmount
     return () => {
-      delete (window as any).exportDiagram;
-      delete (window as any).importDiagram;
-      delete (window as any).clearDiagram;
-      delete (window as any).undo;
-      delete (window as any).redo;
-      delete (window as any).centerDiagram;
-      delete (window as any).zoomIn;
-      delete (window as any).zoomOut;
-      delete (window as any).resetZoom;
-      delete (window as any).selectAll;
+      delete window.exportDiagram;
+      delete window.importDiagram;
+      delete window.clearDiagram;
+      delete window.undo;
+      delete window.redo;
+      delete window.centerDiagram;
+      delete window.zoomIn;
+      delete window.zoomOut;
+      delete window.resetZoom;
+      delete window.selectAll;
     };
-  }, [nodes, edges, undo, redo]);
+  }, [nodes, edges, undo, redo, centerDiagram]);
 
   // Global mouse event handling for better drag behavior
   useEffect(() => {
@@ -258,57 +381,7 @@ function SimpleApp() {
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
     };
-  }, [draggedNode, selectedTool, dragOffset, isPanning, panStart, canvasPan, canvasZoom, hasSavedDragHistory, saveToHistory]);
-
-  // Keyboard event handling for deletion and undo/redo
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Don't handle keys if user is editing a node name
-      if (editingNode) return;
-      
-      // Undo: Ctrl+Z (Windows/Linux) or Cmd+Z (Mac)
-      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
-        event.preventDefault();
-        undo();
-        return;
-      }
-      
-      // Redo: Ctrl+Y (Windows/Linux) or Cmd+Shift+Z (Mac) or Ctrl+Shift+Z
-      if (((event.ctrlKey || event.metaKey) && event.key === 'y') || 
-          ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'z')) {
-        event.preventDefault();
-        redo();
-        return;
-      }
-      
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        event.preventDefault();
-        
-        // Save state before deletion
-        saveToHistory();
-        
-        // Delete selected nodes
-        if (selectedNodes.length > 0) {
-          selectedNodes.forEach(nodeId => {
-            deleteNode(nodeId);
-          });
-        }
-        
-        // Delete selected edges
-        if (selectedEdges.length > 0) {
-          selectedEdges.forEach(edgeId => {
-            setEdges(edges.filter(edge => edge.id !== edgeId));
-          });
-          setSelectedEdges([]);
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [selectedNodes, selectedEdges, nodes, edges, editingNode, undo, redo, saveToHistory]);
+  }, [draggedNode, selectedTool, dragOffset, isPanning, panStart, hasSavedDragHistory, saveToHistory, screenToWorld]);
 
   // Mode-specific helper functions
   const getAvailableTools = (mode: DiagramMode) => {
@@ -333,97 +406,6 @@ function SimpleApp() {
     }
   };
 
-  // Coordinate transformation functions
-  const screenToWorld = (screenPoint: Point): Point => {
-    return {
-      x: (screenPoint.x - canvasPan.x) / canvasZoom,
-      y: (screenPoint.y - canvasPan.y) / canvasZoom
-    };
-  };
-
-  const worldToScreen = (worldPoint: Point): Point => {
-    return {
-      x: worldPoint.x * canvasZoom + canvasPan.x,
-      y: worldPoint.y * canvasZoom + canvasPan.y
-    };
-  };
-
-  // Calculate diagram bounds for centering and export
-  const calculateDiagramBounds = () => {
-    if (nodes.length === 0) {
-      return { minX: 0, minY: 0, maxX: 800, maxY: 600, width: 800, height: 600 };
-    }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-    // Check all nodes
-    nodes.forEach(node => {
-      const dimensions = getNodeDimensions(node);
-      const halfWidth = dimensions.width / 2;
-      const halfHeight = dimensions.height / 2;
-      
-      minX = Math.min(minX, node.position.x - halfWidth);
-      maxX = Math.max(maxX, node.position.x + halfWidth);
-      minY = Math.min(minY, node.position.y - halfHeight);
-      maxY = Math.max(maxY, node.position.y + halfHeight);
-    });
-
-    // Check entry/exit arrow points
-    edges.forEach(edge => {
-      if (edge.type === 'entry' && edge.entryPoint) {
-        minX = Math.min(minX, edge.entryPoint.x);
-        maxX = Math.max(maxX, edge.entryPoint.x);
-        minY = Math.min(minY, edge.entryPoint.y);
-        maxY = Math.max(maxY, edge.entryPoint.y);
-      }
-      if (edge.type === 'exit' && edge.exitPoint) {
-        minX = Math.min(minX, edge.exitPoint.x);
-        maxX = Math.max(maxX, edge.exitPoint.x);
-        minY = Math.min(minY, edge.exitPoint.y);
-        maxY = Math.max(maxY, edge.exitPoint.y);
-      }
-    });
-
-    // Add padding
-    const padding = 50;
-    minX -= padding;
-    minY -= padding;
-    maxX += padding;
-    maxY += padding;
-
-    return {
-      minX, minY, maxX, maxY,
-      width: maxX - minX,
-      height: maxY - minY
-    };
-  };
-
-  const centerDiagram = () => {
-    if (!canvasRef.current) return;
-    
-    const bounds = calculateDiagramBounds();
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    
-    // Calculate the center of the canvas
-    const canvasCenterX = canvasRect.width / 2;
-    const canvasCenterY = canvasRect.height / 2;
-    
-    // Calculate the center of the diagram
-    const diagramCenterX = (bounds.minX + bounds.maxX) / 2;
-    const diagramCenterY = (bounds.minY + bounds.maxY) / 2;
-    
-    // Calculate the optimal zoom to fit the diagram
-    const scaleX = (canvasRect.width * 0.8) / bounds.width;
-    const scaleY = (canvasRect.height * 0.8) / bounds.height;
-    const optimalZoom = Math.min(scaleX, scaleY, 2.0); // Cap at 2x zoom
-    
-    // Set the pan to center the diagram
-    setCanvasZoom(optimalZoom);
-    setCanvasPan({
-      x: canvasCenterX - diagramCenterX * optimalZoom,
-      y: canvasCenterY - diagramCenterY * optimalZoom
-    });
-  };
 
   const getAvailableEdgeTypes = (mode: DiagramMode, _sourceType?: string, _targetType?: string, isAutoDetect: boolean = true): Edge['type'][] => {
     let baseTypes: Edge['type'][] = [];
@@ -915,15 +897,69 @@ function SimpleApp() {
   };
 
   // Node customization functions
-  const openCustomizationPanel = (nodeId: string) => {
+  const openCustomizationPanel = useCallback((nodeId: string) => {
     setSelectedNodeForCustomization(nodeId);
     setShowCustomizationPanel(true);
-  };
+  }, []);
 
-  const closeCustomizationPanel = () => {
+  const closeCustomizationPanel = useCallback(() => {
     setSelectedNodeForCustomization(null);
     setShowCustomizationPanel(false);
-  };
+  }, []);
+
+  const deleteNode = useCallback((nodeId: string) => {
+    setNodes(prevNodes => prevNodes.filter(node => node.id !== nodeId));
+    setEdges(prevEdges => prevEdges.filter(edge => edge.source !== nodeId && edge.target !== nodeId));
+    setSelectedNodes([]);
+    setSelectedEdges([]);
+    if (editingNode === nodeId) {
+      setEditingNode(null);
+      setEditText('');
+    }
+    closeCustomizationPanel();
+  }, [closeCustomizationPanel, editingNode]);
+
+  // Keyboard event handling for deletion and undo/redo
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (editingNode) return;
+
+      if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+        event.preventDefault();
+        undo();
+        return;
+      }
+
+      if (((event.ctrlKey || event.metaKey) && event.key === 'y') ||
+          ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'z')) {
+        event.preventDefault();
+        redo();
+        return;
+      }
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        saveToHistory();
+
+        if (selectedNodes.length > 0) {
+          selectedNodes.forEach(nodeId => {
+            deleteNode(nodeId);
+          });
+        }
+
+        if (selectedEdges.length > 0) {
+          const remainingEdges = edges.filter(edge => !selectedEdges.includes(edge.id));
+          setEdges(remainingEdges);
+          setSelectedEdges([]);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [deleteNode, edges, editingNode, redo, saveToHistory, selectedEdges, selectedNodes, undo]);
 
   const updateNodeStyle = (nodeId: string, styleUpdate: Partial<NodeStyle>) => {
     // Save state before styling
@@ -946,7 +982,8 @@ function SimpleApp() {
     
     setNodes(nodes.map(node => {
       if (node.id === nodeId) {
-        const { style, ...nodeWithoutStyle } = node;
+        const nodeWithoutStyle = { ...node };
+        delete (nodeWithoutStyle as Node).style;
         return nodeWithoutStyle;
       }
       return node;
@@ -1004,19 +1041,6 @@ function SimpleApp() {
     closeEdgeModificationPanel();
   };
 
-  const deleteNode = (nodeId: string) => {
-    // Remove the node
-    setNodes(nodes.filter(node => node.id !== nodeId));
-    // Remove any edges connected to this node
-    setEdges(edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId));
-    // Clear selections and editing state
-    setSelectedNodes([]);
-    if (editingNode === nodeId) {
-      setEditingNode(null);
-      setEditText('');
-    }
-    closeCustomizationPanel();
-  };
 
   // Import/Export functions
   const importFromJSON = () => {

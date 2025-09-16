@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 import * as d3 from 'd3';
 import { useD3 } from '../../hooks/useD3';
 import { useDiagram } from '../../hooks/useDiagram';
@@ -35,7 +35,7 @@ export const Canvas: React.FC = () => {
   };
 
   // Render function for D3
-  const render = useD3((svg) => {
+  const render = useD3(useCallback((svg: d3.Selection<SVGSVGElement, unknown, null, undefined>) => {
     // Clear previous content
     svg.selectAll('*').remove();
 
@@ -78,8 +78,8 @@ export const Canvas: React.FC = () => {
 
     // Render edges
     const edgeGroup = g.append('g').attr('class', 'edges');
-    const edgeSelection = edgeGroup.selectAll('.edge')
-      .data(edges, (d: any) => d.id);
+    const edgeSelection = edgeGroup.selectAll<SVGGElement, Edge>('.edge')
+      .data(edges, (d) => d?.id ?? '');
 
     const edgeEnter = edgeSelection.enter()
       .append('g')
@@ -143,8 +143,8 @@ export const Canvas: React.FC = () => {
 
     // Render nodes
     const nodeGroup = g.append('g').attr('class', 'nodes');
-    const nodeSelection = nodeGroup.selectAll('.node')
-      .data(nodes, (d: any) => d.id);
+    const nodeSelection = nodeGroup.selectAll<SVGGElement, Node>('.node')
+      .data(nodes, (d) => d?.id ?? '');
 
     const nodeEnter = nodeSelection.enter()
       .append('g')
@@ -208,7 +208,7 @@ export const Canvas: React.FC = () => {
         selectNode(d.id);
       })
       .call(d3.drag<SVGGElement, Node>()
-        .on('start', function(event, d) {
+        .on('start', function() {
           d3.select(this).raise();
         })
         .on('drag', function(event, d) {
@@ -217,9 +217,8 @@ export const Canvas: React.FC = () => {
           d3.select(this).attr('transform', `translate(${newX}, ${newY})`);
           
           // Update connected edges
-          svg.selectAll('.edge-path')
-            .attr('d', function(edgeData: any) {
-              const edge = edgeData as Edge;
+          svg.selectAll<SVGPathElement, Edge>('.edge-path')
+            .attr('d', function(edge) {
               const sourceNode = nodes.find(n => n.id === edge.source);
               const targetNode = nodes.find(n => n.id === edge.target);
               if (!sourceNode || !targetNode) return '';
@@ -238,7 +237,7 @@ export const Canvas: React.FC = () => {
 
     nodeSelection.exit().remove();
 
-  }, [nodes, edges, selectedItems, zoom, panOffset]);
+  }, [dispatch, edges, moveNode, nodes, panOffset, selectedItems, zoom, selectNode]));
 
   // Update canvas size on resize
   useEffect(() => {
@@ -315,11 +314,10 @@ function getNodeConnectionPoint(node: Node, targetPos: Point): Point {
 }
 
 // Helper function to wrap text
-function wrapText(text: d3.Selection<SVGTextElement, any, any, any>, width: number) {
+function wrapText(text: d3.Selection<SVGTextElement, Node, SVGGElement, unknown>, width: number) {
   text.each(function() {
     const textElement = d3.select(this);
     const words = textElement.text().split(/\s+/).reverse();
-    let word;
     let line: string[] = [];
     let lineNumber = 0;
     const lineHeight = 1.1; // ems
@@ -327,7 +325,11 @@ function wrapText(text: d3.Selection<SVGTextElement, any, any, any>, width: numb
     const dy = parseFloat(textElement.attr('dy') || '0');
     let tspan = textElement.text(null).append('tspan').attr('x', 0).attr('y', y).attr('dy', dy + 'em');
     
-    while (word = words.pop()) {
+    while (words.length > 0) {
+      const word = words.pop();
+      if (!word) {
+        continue;
+      }
       line.push(word);
       tspan.text(line.join(' '));
       if (tspan.node()!.getComputedTextLength() > width) {

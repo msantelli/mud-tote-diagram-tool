@@ -1,5 +1,4 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { NodeType } from '../types/all';
 
 interface UIState {
   selectedTool: 'select' | 'vocabulary' | 'practice' | 'test' | 'operate' | 'edge';

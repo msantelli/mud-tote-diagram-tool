@@ -1,12 +1,43 @@
 import { useState, useEffect } from 'react';
+import { Node, Edge } from '../types/all';
 
 export interface StoredDiagram {
   id: string;
   name: string;
-  data: any; // The diagram data (nodes, edges, etc.)
+  data: DiagramPayload;
   lastModified: number;
   mode: 'MUD' | 'TOTE' | 'HYBRID';
 }
+
+interface DiagramPayload {
+  nodes: Node[];
+  edges: Edge[];
+  metadata?: Record<string, unknown>;
+}
+
+const isDiagramPayload = (value: unknown): value is DiagramPayload => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const payload = value as Partial<DiagramPayload>;
+  return Array.isArray(payload.nodes) && Array.isArray(payload.edges);
+};
+
+const isStoredDiagram = (value: unknown): value is StoredDiagram => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<StoredDiagram>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.lastModified === 'number' &&
+    (candidate.mode === 'MUD' || candidate.mode === 'TOTE' || candidate.mode === 'HYBRID') &&
+    isDiagramPayload(candidate.data)
+  );
+};
 
 export const useOfflineStorage = () => {
   const [diagrams, setDiagrams] = useState<StoredDiagram[]>([]);
@@ -19,8 +50,13 @@ export const useOfflineStorage = () => {
     try {
       const storedData = localStorage.getItem(STORAGE_KEY);
       if (storedData) {
-        const parsedDiagrams = JSON.parse(storedData);
-        setDiagrams(Array.isArray(parsedDiagrams) ? parsedDiagrams : []);
+        const parsedDiagrams = JSON.parse(storedData) as unknown;
+        if (Array.isArray(parsedDiagrams)) {
+          const validEntries = parsedDiagrams.filter(isStoredDiagram);
+          setDiagrams(validEntries);
+        } else {
+          setDiagrams([]);
+        }
       }
     } catch (error) {
       console.warn('Failed to load stored diagrams:', error);
@@ -86,13 +122,10 @@ export const useOfflineStorage = () => {
       
       reader.onload = (e) => {
         try {
-          const importedData = JSON.parse(e.target?.result as string);
+          const importedData = JSON.parse(e.target?.result as string) as unknown;
           
           if (Array.isArray(importedData)) {
-            const validDiagrams = importedData.filter(item => 
-              item && typeof item === 'object' && 
-              item.name && item.data && item.mode
-            );
+            const validDiagrams = importedData.filter(isStoredDiagram);
             
             // Add imported diagrams with new IDs to avoid conflicts
             const newDiagrams = validDiagrams.map(diagram => ({
@@ -107,6 +140,7 @@ export const useOfflineStorage = () => {
             reject(new Error('Invalid file format'));
           }
         } catch (error) {
+          console.error('Failed to parse file', error);
           reject(new Error('Failed to parse file'));
         }
       };
