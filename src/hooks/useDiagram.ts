@@ -5,7 +5,8 @@ import {
   updateNodePosition, 
   selectItem, 
   clearSelection,
-  createDiagram
+  createDiagram,
+  saveToHistory
 } from '../store/diagramSlice';
 import { setSelectedTool } from '../store/uiSlice';
 import type { Edge, Point, NodeType } from '../types/all';
@@ -24,6 +25,9 @@ export const useDiagram = () => {
   };
 
   const addNewNode = (type: NodeType, position: Point, label: string = '') => {
+    // Save current state to history before making changes
+    dispatch(saveToHistory());
+    
     const newNode = {
       type,
       position,
@@ -33,6 +37,9 @@ export const useDiagram = () => {
   };
 
   const addNewEdge = (sourceId: string, targetId: string, type: Edge['type']) => {
+    // Save current state to history before making changes
+    dispatch(saveToHistory());
+    
     const newEdge = {
       source: sourceId,
       target: targetId,
@@ -41,7 +48,11 @@ export const useDiagram = () => {
     dispatch(addEdge(newEdge));
   };
 
-  const moveNode = (nodeId: string, position: Point) => {
+  const moveNode = (nodeId: string, position: Point, saveHistory = true) => {
+    if (saveHistory) {
+      // Save current state to history before making changes
+      dispatch(saveToHistory());
+    }
     dispatch(updateNodePosition({ id: nodeId, position }));
   };
 

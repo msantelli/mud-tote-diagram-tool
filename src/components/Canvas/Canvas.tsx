@@ -24,6 +24,7 @@ export const Canvas: React.FC = () => {
     const x = (event.clientX - rect.left - panOffset.x) / zoom;
     const y = (event.clientY - rect.top - panOffset.y) / zoom;
 
+    // Handle node creation tools
     if (selectedTool === 'vocabulary') {
       addNewNode('vocabulary', { x, y });
     } else if (selectedTool === 'practice') {
@@ -32,6 +33,15 @@ export const Canvas: React.FC = () => {
       addNewNode('test', { x, y });
     } else if (selectedTool === 'operate') {
       addNewNode('operate', { x, y });
+    } else if (selectedTool === 'entry') {
+      // TODO: Handle entry arrow creation
+      console.log('Entry tool clicked at', { x, y });
+    } else if (selectedTool === 'exit') {
+      // TODO: Handle exit arrow creation  
+      console.log('Exit tool clicked at', { x, y });
+    } else if (selectedTool === 'edge') {
+      // TODO: Handle edge creation mode
+      console.log('Edge tool clicked at', { x, y });
     } else if (selectedTool === 'select') {
       clearCurrentSelection();
     }
