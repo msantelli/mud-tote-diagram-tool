@@ -1,13 +1,29 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 
 interface UIState {
-  selectedTool: 'select' | 'vocabulary' | 'practice' | 'test' | 'operate' | 'edge';
+  selectedTool: 'select' | 'vocabulary' | 'practice' | 'test' | 'operate' | 'edge' | 'entry' | 'exit';
   isPropertyPanelOpen: boolean;
   zoom: number;
   panOffset: { x: number; y: number };
   canvasSize: { width: number; height: number };
   isDragging: boolean;
   draggedItemId?: string;
+  
+  // Diagram mode and settings
+  diagramMode: 'MUD' | 'TOTE' | 'HYBRID';
+  autoDetectEdges: boolean;
+  showUnmarkedEdges: boolean;
+  
+  // Multi-step workflows
+  pendingEdge: { source: string; target: string } | null;
+  pendingEntryExit: { type: 'entry' | 'exit'; nodeId?: string } | null;
+  
+  // Modal states
+  showEdgeTypeSelector: boolean;
+  showCustomizationPanel: boolean;
+  showEdgeModificationPanel: boolean;
+  selectedNodeForCustomization: string | null;
+  selectedEdgeForModification: string | null;
 }
 
 const initialState: UIState = {
@@ -17,7 +33,23 @@ const initialState: UIState = {
   panOffset: { x: 0, y: 0 },
   canvasSize: { width: 800, height: 600 },
   isDragging: false,
-  draggedItemId: undefined
+  draggedItemId: undefined,
+  
+  // Diagram mode and settings
+  diagramMode: 'HYBRID',
+  autoDetectEdges: true,
+  showUnmarkedEdges: false,
+  
+  // Multi-step workflows
+  pendingEdge: null,
+  pendingEntryExit: null,
+  
+  // Modal states
+  showEdgeTypeSelector: false,
+  showCustomizationPanel: false,
+  showEdgeModificationPanel: false,
+  selectedNodeForCustomization: null,
+  selectedEdgeForModification: null
 };
 
 const uiSlice = createSlice({
@@ -56,6 +88,61 @@ const uiSlice = createSlice({
     resetView: (state) => {
       state.zoom = 1;
       state.panOffset = { x: 0, y: 0 };
+    },
+    
+    // Diagram mode and settings
+    setDiagramMode: (state, action: PayloadAction<'MUD' | 'TOTE' | 'HYBRID'>) => {
+      state.diagramMode = action.payload;
+    },
+    
+    setAutoDetectEdges: (state, action: PayloadAction<boolean>) => {
+      state.autoDetectEdges = action.payload;
+    },
+    
+    setShowUnmarkedEdges: (state, action: PayloadAction<boolean>) => {
+      state.showUnmarkedEdges = action.payload;
+    },
+    
+    // Multi-step workflows
+    setPendingEdge: (state, action: PayloadAction<{ source: string; target: string } | null>) => {
+      state.pendingEdge = action.payload;
+    },
+    
+    setPendingEntryExit: (state, action: PayloadAction<{ type: 'entry' | 'exit'; nodeId?: string } | null>) => {
+      state.pendingEntryExit = action.payload;
+    },
+    
+    // Modal states
+    setShowEdgeTypeSelector: (state, action: PayloadAction<boolean>) => {
+      state.showEdgeTypeSelector = action.payload;
+    },
+    
+    setShowCustomizationPanel: (state, action: PayloadAction<boolean>) => {
+      state.showCustomizationPanel = action.payload;
+      if (!action.payload) {
+        state.selectedNodeForCustomization = null;
+      }
+    },
+    
+    setShowEdgeModificationPanel: (state, action: PayloadAction<boolean>) => {
+      state.showEdgeModificationPanel = action.payload;
+      if (!action.payload) {
+        state.selectedEdgeForModification = null;
+      }
+    },
+    
+    setSelectedNodeForCustomization: (state, action: PayloadAction<string | null>) => {
+      state.selectedNodeForCustomization = action.payload;
+      if (action.payload) {
+        state.showCustomizationPanel = true;
+      }
+    },
+    
+    setSelectedEdgeForModification: (state, action: PayloadAction<string | null>) => {
+      state.selectedEdgeForModification = action.payload;
+      if (action.payload) {
+        state.showEdgeModificationPanel = true;
+      }
     }
   }
 });
@@ -68,7 +155,17 @@ export const {
   setPanOffset,
   setCanvasSize,
   setDragging,
-  resetView
+  resetView,
+  setDiagramMode,
+  setAutoDetectEdges,
+  setShowUnmarkedEdges,
+  setPendingEdge,
+  setPendingEntryExit,
+  setShowEdgeTypeSelector,
+  setShowCustomizationPanel,
+  setShowEdgeModificationPanel,
+  setSelectedNodeForCustomization,
+  setSelectedEdgeForModification
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

@@ -8,7 +8,7 @@ import {
   createDiagram
 } from '../store/diagramSlice';
 import { setSelectedTool } from '../store/uiSlice';
-import { Edge, Point, NodeType } from '../types/all';
+import type { Edge, Point, NodeType } from '../types/all';
 
 export const useDiagram = () => {
   const dispatch = useAppDispatch();

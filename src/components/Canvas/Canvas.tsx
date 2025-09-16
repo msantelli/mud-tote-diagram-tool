@@ -4,7 +4,7 @@ import { useD3 } from '../../hooks/useD3';
 import { useDiagram } from '../../hooks/useDiagram';
 import { useAppSelector, useAppDispatch } from '../../store/hooks';
 import { setZoom, setPanOffset, setCanvasSize } from '../../store/uiSlice';
-import { Node, Edge, Point } from '../../types/all';
+import type { Node, Edge, Point } from '../../types/all';
 import './Canvas.css';
 
 export const Canvas: React.FC = () => {
@@ -314,7 +314,7 @@ function getNodeConnectionPoint(node: Node, targetPos: Point): Point {
 }
 
 // Helper function to wrap text
-function wrapText(text: d3.Selection<SVGTextElement, Node, SVGGElement, unknown>, width: number) {
+function wrapText(text: d3.Selection<SVGTextElement, any, any, any>, width: number) {
   text.each(function() {
     const textElement = d3.select(this);
     const words = textElement.text().split(/\s+/).reverse();

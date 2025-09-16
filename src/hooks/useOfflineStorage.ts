@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Node, Edge } from '../types/all';
+import type { Node, Edge } from '../types/all';
 
 export interface StoredDiagram {
   id: string;

@@ -1,22 +1,28 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { Node, Edge, Diagram, Point } from '../types/all';
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import type { Node, Edge, Diagram, Point } from '../types/all';
 import { v4 as uuidv4 } from 'uuid';
 
 interface DiagramState {
   currentDiagram: Diagram | null;
   selectedItems: string[];
+  selectedNodes: string[];
+  selectedEdges: string[];
   history: {
     past: Diagram[];
     future: Diagram[];
+    maxSize: number;
   };
 }
 
 const initialState: DiagramState = {
   currentDiagram: null,
   selectedItems: [],
+  selectedNodes: [],
+  selectedEdges: [],
   history: {
     past: [],
-    future: []
+    future: [],
+    maxSize: 50
   }
 };
 
@@ -127,7 +133,87 @@ const diagramSlice = createSlice({
     loadDiagram: (state, action: PayloadAction<Diagram>) => {
       state.currentDiagram = action.payload;
       state.selectedItems = [];
-      state.history = { past: [], future: [] };
+      state.selectedNodes = [];
+      state.selectedEdges = [];
+      state.history = { past: [], future: [], maxSize: 50 };
+    },
+    
+    // Enhanced selection management
+    selectNodes: (state, action: PayloadAction<string[]>) => {
+      state.selectedNodes = action.payload;
+      state.selectedItems = [...action.payload, ...state.selectedEdges];
+    },
+    
+    selectEdges: (state, action: PayloadAction<string[]>) => {
+      state.selectedEdges = action.payload;
+      state.selectedItems = [...state.selectedNodes, ...action.payload];
+    },
+    
+    selectAll: (state) => {
+      if (state.currentDiagram) {
+        state.selectedNodes = state.currentDiagram.nodes.map(n => n.id);
+        state.selectedEdges = state.currentDiagram.edges.map(e => e.id);
+        state.selectedItems = [...state.selectedNodes, ...state.selectedEdges];
+      }
+    },
+    
+    // History management
+    saveToHistory: (state) => {
+      if (state.currentDiagram) {
+        // Clone the current diagram for history
+        const diagramSnapshot = JSON.parse(JSON.stringify(state.currentDiagram));
+        
+        // Add to past, remove oldest if over limit
+        state.history.past.push(diagramSnapshot);
+        if (state.history.past.length > state.history.maxSize) {
+          state.history.past.shift();
+        }
+        
+        // Clear future when new action is taken
+        state.history.future = [];
+      }
+    },
+    
+    undo: (state) => {
+      if (state.history.past.length > 0 && state.currentDiagram) {
+        // Save current state to future
+        const currentSnapshot = JSON.parse(JSON.stringify(state.currentDiagram));
+        state.history.future.unshift(currentSnapshot);
+        
+        // Restore from past
+        const previousState = state.history.past.pop()!;
+        state.currentDiagram = previousState;
+        
+        // Clear selections
+        state.selectedItems = [];
+        state.selectedNodes = [];
+        state.selectedEdges = [];
+      }
+    },
+    
+    redo: (state) => {
+      if (state.history.future.length > 0 && state.currentDiagram) {
+        // Save current state to past
+        const currentSnapshot = JSON.parse(JSON.stringify(state.currentDiagram));
+        state.history.past.push(currentSnapshot);
+        
+        // Restore from future
+        const nextState = state.history.future.shift()!;
+        state.currentDiagram = nextState;
+        
+        // Clear selections
+        state.selectedItems = [];
+        state.selectedNodes = [];
+        state.selectedEdges = [];
+      }
+    },
+    
+    setHistoryMaxSize: (state, action: PayloadAction<number>) => {
+      state.history.maxSize = Math.max(1, action.payload);
+      // Trim if necessary
+      while (state.history.past.length > state.history.maxSize) {
+        state.history.past.shift();
+      }
     }
   }
 });
@@ -144,7 +230,14 @@ export const {
   selectItem,
   addToSelection,
   clearSelection,
-  loadDiagram
+  loadDiagram,
+  selectNodes,
+  selectEdges,
+  selectAll,
+  saveToHistory,
+  undo,
+  redo,
+  setHistoryMaxSize
 } = diagramSlice.actions;
 
 export default diagramSlice.reducer;
