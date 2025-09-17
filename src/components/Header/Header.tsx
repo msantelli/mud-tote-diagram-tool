@@ -9,6 +9,14 @@ interface HeaderProps {
   showUnmarkedEdges: boolean;
   onUnmarkedEdgesChange: (value: boolean) => void;
   
+  // Grid settings
+  showGrid: boolean;
+  onShowGridChange: (value: boolean) => void;
+  snapToGrid: boolean;
+  onSnapToGridChange: (value: boolean) => void;
+  gridSpacing: number;
+  onGridSpacingChange: (value: number) => void;
+  
   // Tools
   selectedTool: string;
   availableTools: string[];
@@ -35,6 +43,12 @@ export const Header: React.FC<HeaderProps> = ({
   onAutoDetectChange,
   showUnmarkedEdges,
   onUnmarkedEdgesChange,
+  showGrid,
+  onShowGridChange,
+  snapToGrid,
+  onSnapToGridChange,
+  gridSpacing,
+  onGridSpacingChange,
   selectedTool,
   availableTools,
   onToolSelect,
@@ -152,6 +166,90 @@ export const Header: React.FC<HeaderProps> = ({
           >
             Unmarked edges
           </label>
+        </div>
+
+        {/* Grid controls */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginLeft: '1rem', padding: '0 1rem', background: 'rgba(255,255,255,0.1)', borderRadius: '6px' }}>
+          {/* Show Grid Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <input
+              type="checkbox"
+              id="show-grid"
+              checked={showGrid}
+              onChange={(e) => onShowGridChange(e.target.checked)}
+              style={{
+                width: '16px',
+                height: '16px',
+                cursor: 'pointer'
+              }}
+            />
+            <label
+              htmlFor="show-grid"
+              style={{
+                color: 'white',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                userSelect: 'none'
+              }}
+            >
+              Grid
+            </label>
+          </div>
+
+          {/* Snap to Grid Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <input
+              type="checkbox"
+              id="snap-to-grid"
+              checked={snapToGrid}
+              onChange={(e) => onSnapToGridChange(e.target.checked)}
+              style={{
+                width: '16px',
+                height: '16px',
+                cursor: 'pointer'
+              }}
+            />
+            <label
+              htmlFor="snap-to-grid"
+              style={{
+                color: 'white',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                userSelect: 'none'
+              }}
+            >
+              Snap
+            </label>
+          </div>
+
+          {/* Grid Spacing Control */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label
+              htmlFor="grid-spacing"
+              style={{
+                color: 'white',
+                fontSize: '0.9rem',
+                userSelect: 'none'
+              }}
+            >
+              Spacing:
+            </label>
+            <input
+              type="range"
+              id="grid-spacing"
+              min="10"
+              max="200"
+              value={gridSpacing}
+              onChange={(e) => onGridSpacingChange(Number(e.target.value))}
+              style={{
+                width: '80px',
+                cursor: 'pointer'
+              }}
+            />
+            <span style={{ color: 'white', fontSize: '0.8rem', minWidth: '30px' }}>
+              {gridSpacing}
+            </span>
+          </div>
         </div>
       </div>
       

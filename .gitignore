@@ -33,4 +33,6 @@ dist-electron/*.deb
 dist-electron
 # Research artifacts
 research/
+ARCHITECTURE_PROGRESS.md
+
 

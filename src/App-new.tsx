@@ -4,20 +4,31 @@ import { store } from './store/store';
 import { InstallPrompt, PWAStatus } from './components/PWAComponents';
 import { Header } from './components/Header';
 import { Canvas } from './components/Canvas';
+import { EdgeTypeSelector } from './components/EdgeTypeSelector';
+import { NodeCustomizationPanel } from './components/NodeCustomizationPanel';
+import { EdgeModificationPanel } from './components/EdgeModificationPanel';
 import { useAppSelector, useAppDispatch } from './store/hooks';
 import { 
   setDiagramMode,
   setAutoDetectEdges,
   setShowUnmarkedEdges,
-  setSelectedTool
+  setShowGrid,
+  setSnapToGrid,
+  setGridSpacing,
+  setSelectedTool,
+  setShowEdgeTypeSelector,
+  setShowCustomizationPanel,
+  setShowEdgeModificationPanel
 } from './store/uiSlice';
 import { 
   createDiagram,
   undo,
   redo,
-  selectNodes
+  selectNodes,
+  loadDiagram
 } from './store/diagramSlice';
 import { getAvailableTools } from './utils/diagramUtils';
+import { exportAsJSON, exportAsSVG, exportAsLaTeX, importFromJSON } from './utils/exportUtils';
 
 const AppContent: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -27,6 +38,12 @@ const AppContent: React.FC = () => {
   const selectedTool = useAppSelector(state => state.ui.selectedTool);
   const autoDetectEdges = useAppSelector(state => state.ui.autoDetectEdges);
   const showUnmarkedEdges = useAppSelector(state => state.ui.showUnmarkedEdges);
+  const showGrid = useAppSelector(state => state.ui.showGrid);
+  const snapToGrid = useAppSelector(state => state.ui.snapToGrid);
+  const gridSpacing = useAppSelector(state => state.ui.gridSpacing);
+  const showEdgeTypeSelector = useAppSelector(state => state.ui.showEdgeTypeSelector);
+  const showCustomizationPanel = useAppSelector(state => state.ui.showCustomizationPanel);
+  const showEdgeModificationPanel = useAppSelector(state => state.ui.showEdgeModificationPanel);
   
   // Diagram state selectors
   const currentDiagram = useAppSelector(state => state.diagram.currentDiagram);
@@ -56,6 +73,18 @@ const AppContent: React.FC = () => {
     dispatch(setShowUnmarkedEdges(value));
   };
 
+  const handleShowGridChange = (value: boolean) => {
+    dispatch(setShowGrid(value));
+  };
+
+  const handleSnapToGridChange = (value: boolean) => {
+    dispatch(setSnapToGrid(value));
+  };
+
+  const handleGridSpacingChange = (value: number) => {
+    dispatch(setGridSpacing(value));
+  };
+
   const handleToolSelect = (tool: string) => {
     dispatch(setSelectedTool(tool as any));
     // Clear selections when switching tools
@@ -71,23 +100,39 @@ const AppContent: React.FC = () => {
   };
 
   const handleImport = () => {
-    // TODO: Implement import functionality
-    console.log('Import functionality to be implemented');
+    importFromJSON((diagram) => {
+      dispatch(loadDiagram(diagram));
+    });
   };
 
   const handleExportJSON = () => {
-    // TODO: Implement JSON export
-    console.log('JSON export to be implemented');
+    if (currentDiagram) {
+      exportAsJSON(currentDiagram);
+    }
   };
 
   const handleExportSVG = () => {
-    // TODO: Implement SVG export
-    console.log('SVG export to be implemented');
+    if (currentDiagram) {
+      exportAsSVG(currentDiagram);
+    }
   };
 
   const handleExportLatex = () => {
-    // TODO: Implement LaTeX export
-    console.log('LaTeX export to be implemented');
+    if (currentDiagram) {
+      exportAsLaTeX(currentDiagram);
+    }
+  };
+
+  const handleCloseEdgeTypeSelector = () => {
+    dispatch(setShowEdgeTypeSelector(false));
+  };
+
+  const handleCloseCustomizationPanel = () => {
+    dispatch(setShowCustomizationPanel(false));
+  };
+
+  const handleCloseEdgeModificationPanel = () => {
+    dispatch(setShowEdgeModificationPanel(false));
   };
 
   return (
@@ -104,6 +149,12 @@ const AppContent: React.FC = () => {
         onAutoDetectChange={handleAutoDetectChange}
         showUnmarkedEdges={showUnmarkedEdges}
         onUnmarkedEdgesChange={handleUnmarkedEdgesChange}
+        showGrid={showGrid}
+        onShowGridChange={handleShowGridChange}
+        snapToGrid={snapToGrid}
+        onSnapToGridChange={handleSnapToGridChange}
+        gridSpacing={gridSpacing}
+        onGridSpacingChange={handleGridSpacingChange}
         selectedTool={selectedTool}
         availableTools={[...getAvailableTools(diagramMode)]}
         onToolSelect={handleToolSelect}
@@ -127,6 +178,20 @@ const AppContent: React.FC = () => {
         
         {/* TODO: Add side panels for properties, etc. */}
       </div>
+      
+      {/* Modals */}
+      <EdgeTypeSelector 
+        isOpen={showEdgeTypeSelector}
+        onClose={handleCloseEdgeTypeSelector}
+      />
+      <NodeCustomizationPanel
+        isOpen={showCustomizationPanel}
+        onClose={handleCloseCustomizationPanel}
+      />
+      <EdgeModificationPanel
+        isOpen={showEdgeModificationPanel}
+        onClose={handleCloseEdgeModificationPanel}
+      />
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import type { Node, Edge, Diagram, Point } from '../types/all';
+import type { Node, Edge, Diagram, Point, EntryPoint, ExitPoint } from '../types/all';
 import { v4 as uuidv4 } from 'uuid';
 
 interface DiagramState {
@@ -37,6 +37,8 @@ const diagramSlice = createSlice({
         type: action.payload.type,
         nodes: [],
         edges: [],
+        entryPoints: [],
+        exitPoints: [],
         metadata: {
           created: new Date().toISOString(),
           modified: new Date().toISOString()
@@ -109,6 +111,19 @@ const diagramSlice = createSlice({
         state.currentDiagram.edges = state.currentDiagram.edges.filter(e => e.id !== edgeId);
         state.selectedItems = state.selectedItems.filter(id => id !== edgeId);
         state.currentDiagram.metadata.modified = new Date().toISOString();
+      }
+    },
+    
+    updateEdge: (state, action: PayloadAction<{ id: string; updates: Partial<Edge> }>) => {
+      if (state.currentDiagram) {
+        const edgeIndex = state.currentDiagram.edges.findIndex(e => e.id === action.payload.id);
+        if (edgeIndex !== -1) {
+          state.currentDiagram.edges[edgeIndex] = {
+            ...state.currentDiagram.edges[edgeIndex],
+            ...action.payload.updates
+          } as Edge;
+          state.currentDiagram.metadata.modified = new Date().toISOString();
+        }
       }
     },
     
@@ -214,6 +229,63 @@ const diagramSlice = createSlice({
       while (state.history.past.length > state.history.maxSize) {
         state.history.past.shift();
       }
+    },
+
+    // Entry/Exit point management
+    addEntryPoint: (state, action: PayloadAction<Omit<EntryPoint, 'id'>>) => {
+      if (state.currentDiagram) {
+        const newEntryPoint: EntryPoint = {
+          id: uuidv4(),
+          ...action.payload
+        };
+        state.currentDiagram.entryPoints.push(newEntryPoint);
+        state.currentDiagram.metadata.modified = new Date().toISOString();
+      }
+    },
+
+    addExitPoint: (state, action: PayloadAction<Omit<ExitPoint, 'id'>>) => {
+      if (state.currentDiagram) {
+        const newExitPoint: ExitPoint = {
+          id: uuidv4(),
+          ...action.payload
+        };
+        state.currentDiagram.exitPoints.push(newExitPoint);
+        state.currentDiagram.metadata.modified = new Date().toISOString();
+      }
+    },
+
+    deleteEntryPoint: (state, action: PayloadAction<string>) => {
+      if (state.currentDiagram) {
+        state.currentDiagram.entryPoints = state.currentDiagram.entryPoints.filter(ep => ep.id !== action.payload);
+        state.currentDiagram.metadata.modified = new Date().toISOString();
+      }
+    },
+
+    deleteExitPoint: (state, action: PayloadAction<string>) => {
+      if (state.currentDiagram) {
+        state.currentDiagram.exitPoints = state.currentDiagram.exitPoints.filter(ep => ep.id !== action.payload);
+        state.currentDiagram.metadata.modified = new Date().toISOString();
+      }
+    },
+
+    updateEntryPoint: (state, action: PayloadAction<Partial<EntryPoint> & { id: string }>) => {
+      if (state.currentDiagram) {
+        const index = state.currentDiagram.entryPoints.findIndex(ep => ep.id === action.payload.id);
+        if (index !== -1) {
+          state.currentDiagram.entryPoints[index] = { ...state.currentDiagram.entryPoints[index], ...action.payload };
+          state.currentDiagram.metadata.modified = new Date().toISOString();
+        }
+      }
+    },
+
+    updateExitPoint: (state, action: PayloadAction<Partial<ExitPoint> & { id: string }>) => {
+      if (state.currentDiagram) {
+        const index = state.currentDiagram.exitPoints.findIndex(ep => ep.id === action.payload.id);
+        if (index !== -1) {
+          state.currentDiagram.exitPoints[index] = { ...state.currentDiagram.exitPoints[index], ...action.payload };
+          state.currentDiagram.metadata.modified = new Date().toISOString();
+        }
+      }
     }
   }
 });
@@ -226,6 +298,7 @@ export const {
   updateNodePosition,
   deleteNode,
   deleteEdge,
+  updateEdge,
   selectItems,
   selectItem,
   addToSelection,
@@ -237,7 +310,13 @@ export const {
   saveToHistory,
   undo,
   redo,
-  setHistoryMaxSize
+  setHistoryMaxSize,
+  addEntryPoint,
+  addExitPoint,
+  deleteEntryPoint,
+  deleteExitPoint,
+  updateEntryPoint,
+  updateExitPoint
 } = diagramSlice.actions;
 
 export default diagramSlice.reducer;

@@ -14,6 +14,11 @@ interface UIState {
   autoDetectEdges: boolean;
   showUnmarkedEdges: boolean;
   
+  // Grid settings
+  showGrid: boolean;
+  snapToGrid: boolean;
+  gridSpacing: number;
+  
   // Multi-step workflows
   pendingEdge: { source: string; target: string } | null;
   pendingEntryExit: { type: 'entry' | 'exit'; nodeId?: string } | null;
@@ -39,6 +44,11 @@ const initialState: UIState = {
   diagramMode: 'HYBRID',
   autoDetectEdges: true,
   showUnmarkedEdges: false,
+  
+  // Grid settings
+  showGrid: false,
+  snapToGrid: false,
+  gridSpacing: 50,
   
   // Multi-step workflows
   pendingEdge: null,
@@ -103,9 +113,26 @@ const uiSlice = createSlice({
       state.showUnmarkedEdges = action.payload;
     },
     
+    // Grid settings
+    setShowGrid: (state, action: PayloadAction<boolean>) => {
+      state.showGrid = action.payload;
+    },
+    
+    setSnapToGrid: (state, action: PayloadAction<boolean>) => {
+      state.snapToGrid = action.payload;
+    },
+    
+    setGridSpacing: (state, action: PayloadAction<number>) => {
+      state.gridSpacing = Math.max(10, Math.min(200, action.payload));
+    },
+    
     // Multi-step workflows
     setPendingEdge: (state, action: PayloadAction<{ source: string; target: string } | null>) => {
       state.pendingEdge = action.payload;
+    },
+    
+    clearPendingEdge: (state) => {
+      state.pendingEdge = null;
     },
     
     setPendingEntryExit: (state, action: PayloadAction<{ type: 'entry' | 'exit'; nodeId?: string } | null>) => {
@@ -159,7 +186,11 @@ export const {
   setDiagramMode,
   setAutoDetectEdges,
   setShowUnmarkedEdges,
+  setShowGrid,
+  setSnapToGrid,
+  setGridSpacing,
   setPendingEdge,
+  clearPendingEdge,
   setPendingEntryExit,
   setShowEdgeTypeSelector,
   setShowCustomizationPanel,
